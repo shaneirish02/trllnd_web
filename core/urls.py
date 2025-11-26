@@ -4,7 +4,7 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     CheckAvailabilityView, CreateReservationView,
-    forgot_password, verify_reset_code  # ✅ make sure these are imported
+    forgot_password, verify_reset_code, run_scheduler_api # ✅ make sure these are imported
 )
 from . import views
 
@@ -107,6 +107,8 @@ urlpatterns = [
     path("api/suggest-items/", views.suggest_items, name="suggest-items"),
     path("damage-report/update-status/<int:report_id>/", views.update_report_status, name='update_report_status'),
     path("api/item/<int:item_id>/admin-borrow/", views.admin_borrow_create, name="admin_borrow_create"),
+    path("api/run-scheduler/", run_scheduler_api),
+
 
 
 

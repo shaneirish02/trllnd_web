@@ -46,6 +46,8 @@ from django.core.files.base import ContentFile
 from firebase_admin import messaging
 from .models import DeviceToken, Notification
 from .models import Notification
+from .scheduler import run_scheduled_notifications
+
 
 #stats
 from django.db.models import Count
@@ -335,6 +337,13 @@ def inventory_createitem(request):
 
     return render(request, "inventory_createitem.html")
 
+@csrf_exempt
+def run_scheduler_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST only"}, status=405)
+
+    sent = run_scheduled_notifications()
+    return JsonResponse({"sent": sent})
 
 def inventory_edit(request, item_id):
     item = Item.objects.get(item_id=item_id)
