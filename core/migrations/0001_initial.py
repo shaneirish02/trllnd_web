@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
                 ('valid_id_image', models.ImageField(blank=True, null=True, upload_to='reservation_ids/')),
                 ('message', models.TextField(blank=True, null=True)),
                 ('contact', models.CharField(blank=True, default='N/A', max_length=30)),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('approved', 'Approved'), ('in use', 'In Use'), ('returned', 'Returned'), ('rejected', 'Rejected'), ('cancelled', 'Cancelled')], default='pending', max_length=10)),
+                ('status', models.CharField(choices=[('pending', 'Pending'), ('approved', 'Approved'), ('in use', 'In Use'), ('returned', 'Returned'), ('declined', 'Declined'), ('cancelled', 'Cancelled')], default='pending', max_length=10)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('approved_at', models.DateTimeField(blank=True, null=True)),
                 ('date_receive', models.DateTimeField(blank=True, null=True)),

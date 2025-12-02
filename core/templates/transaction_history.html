@@ -17,7 +17,7 @@
       <option value="approved">Approved</option>
       <option value="in use">In Use</option>
       <option value="returned">Returned</option>
-      <option value="rejected">Rejected</option>
+      <option value="declined">Declined</option>
       <option value="cancelled">Cancelled</option>
     </select>
 
@@ -277,7 +277,7 @@
 }
 
 .badge-declined,
-.badge-rejected {
+.badge-declined {
   background: #fee2e2;
   color: #b91c1c;
 }
@@ -313,7 +313,7 @@
   const toDate = document.getElementById('toDate');
   const rowsPerPage = document.getElementById('rowsPerPage');
 
-  // helper for date
+  // Parse date
   function parseDate(s) {
     if (!s || s === '—') return null;
     return new Date(s.replace(' ', 'T'));
@@ -335,13 +335,9 @@
       const statusText = tr.querySelector('.status span')?.textContent.trim().toLowerCase() || '';
       const receiveTxt = tr.querySelector('.receive')?.textContent.trim() || '—';
 
-      // ✅ Search filter
       const matchesSearch = !q || txId.includes(q) || user.includes(q) || item.includes(q);
-
-      // ✅ Status filter
       const matchesStatus = !selectedStatus || statusText === selectedStatus;
 
-      // ✅ Date filter
       let matchesDate = true;
       if (from || to) {
         const d = parseDate(receiveTxt);
@@ -359,10 +355,15 @@
     });
   }
 
+  // Auto-trigger filters
   [searchBox, statusFilter, fromDate, toDate, rowsPerPage].forEach(el => {
     el?.addEventListener('input', applyFilters);
     el?.addEventListener('change', applyFilters);
   });
+
+  // Extra trigger for date click
+  fromDate.addEventListener('click', applyFilters);
+  toDate.addEventListener('click', applyFilters);
 
   applyFilters();
 })();

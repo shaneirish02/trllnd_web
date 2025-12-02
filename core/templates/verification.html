@@ -83,14 +83,6 @@
     border: 2px solid var(--gray-border);
   }
 
-  #result {
-    background: #fff;
-    border-radius: 12px;
-    padding: 20px;
-    border: 1px solid var(--gray-border);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  }
-
   #qrResultBox {
     background: #f9fafb;
     padding: 12px;
@@ -155,24 +147,23 @@
       </div>
     </div>
 
-      <div id="feedbackForm">
-        <div class="section-header">Borrower & Item Details</div>
-        <div id="borrowerDetails"></div>
+    <div id="feedbackForm">
+      <div class="section-header">Borrower & Item Details</div>
+      <div id="borrowerDetails"></div>
 
-        <div class="section-header">Feedback</div>
-        <label for="feedbackComment">Comment:</label>
-        <textarea id="feedbackComment" placeholder="Type your feedback..."></textarea>
+      <div class="section-header">Feedback</div>
+      <label for="feedbackComment">Comment:</label>
+      <textarea id="feedbackComment" placeholder="Type your feedback..."></textarea>
 
-        <label for="returnStatus">Return Status:</label>
-        <select id="returnStatus">
-          <option value="On Time">On Time</option>
-          <option value="Late Return">Late Return</option>
-          <option value="Not Returned">Not Returned</option>
-        </select>
+      <label for="returnStatus">Return Status:</label>
+      <select id="returnStatus">
+        <option value="On Time">On Time</option>
+        <option value="Late Return">Late Return</option>
+        <option value="Not Returned">Not Returned</option>
+      </select>
 
-        <div class="form-actions">
-          <button type="button" id="submitFeedbackBtn" class="btn btn-success">Confirm Return</button>
-        </div>
+      <div class="form-actions">
+        <button type="button" id="submitFeedbackBtn" class="btn btn-success">Confirm Return</button>
       </div>
     </div>
   </div>
@@ -185,10 +176,10 @@
 (() => {
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
+  const videoEl = document.getElementById("video");
   const statusEl = document.getElementById("status");
   const feedbackForm = document.getElementById("feedbackForm");
   const qrResultBox = document.getElementById("qrResultBox");
-  const videoEl = document.getElementById("video");
   const borrowerDetails = document.getElementById("borrowerDetails");
   const verificationSection = document.getElementById("verificationSection");
 
@@ -196,210 +187,192 @@
   let scanning = false;
   let lastQR = "";
 
-  const ESP32_IP = "192.168.1.50"; 
-  const ESP32_CAPTURE_URL = `http://${ESP32_IP}/capture`;
+  const ESP32_IP = "10.178.207.200";
+  const CAPTURE_URL = `http://${ESP32_IP}/capture`;
 
-  document.getElementById("scanClaim").addEventListener("click", () => startScan("claim"));
-  document.getElementById("scanReturn").addEventListener("click", () => startScan("return"));
+  document.getElementById("scanClaim").onclick = () => startScan("claim");
+  document.getElementById("scanReturn").onclick = () => startScan("return");
 
-  function startScan(m) {
-    mode = m;
+  function startScan(type) {
+    mode = type;
     scanning = true;
     lastQR = "";
     feedbackForm.style.display = "none";
     verificationSection.style.display = "block";
-    statusEl.textContent = "Scanning for QR...";
-    captureLoop();
+    statusEl.textContent = "Scanning...";
+    fastScanLoop();
   }
 
-  async function captureLoop() {
+  async function fastScanLoop() {
     if (!scanning) return;
+
     try {
-      const res = await fetch(`${ESP32_CAPTURE_URL}?${Date.now()}`, { cache: "no-store" });
-      const blob = await res.blob();
+      const res = await fetch(`${CAPTURE_URL}?t=${performance.now()}`, { cache: "no-store" });
+      const arrayBuffer = await res.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: "image/jpeg" });
       const img = await createImageBitmap(blob);
+
+      // Show live preview
+      videoEl.src = URL.createObjectURL(blob);
+
+      // Prepare QR scanning
       canvas.width = img.width;
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
-      videoEl.src = URL.createObjectURL(blob);
-      const imageData = ctx.getImageData(0, 0, img.width, img.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-      if (code && code.data && code.data !== lastQR) {
-        lastQR = code.data.trim();
-        scanning = false;
-        beep();
-        verifyQR(lastQR);
-        return;
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert"
+      });
+
+      if (code && code.data) {
+        const match = code.data.match(/T\d+/);
+        if (match) {
+          const cleanQR = match[0];
+
+          if (cleanQR !== lastQR) {
+            lastQR = cleanQR;
+            scanning = false;
+            beep();
+            statusEl.textContent = `QR Detected: ${cleanQR}`;
+            verifyQR(cleanQR);
+            return;
+          }
+        }
       }
     } catch (err) {
-      console.error("Capture error:", err);
+      console.log("Scan error:", err);
     }
-    if (scanning) setTimeout(captureLoop, 700);
+
+    // FAST scanning interval (150ms)
+    if (scanning) setTimeout(fastScanLoop, 150);
   }
 
   function beep() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      osc.frequency.value = 800;
-      osc.connect(ctx.destination);
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      osc.frequency.value = 1000;
+      osc.connect(audioCtx.destination);
       osc.start();
-      setTimeout(() => osc.stop(), 120);
-    } catch (e) {}
+      setTimeout(() => osc.stop(), 100);
+    } catch (_) {}
   }
 
+  // ========== VERIFY QR ==========
   function verifyQR(qr) {
-    const match = qr.match(/T\d+/);
-    const cleanQR = match ? match[0] : qr.trim();
-    statusEl.textContent = `QR detected: ${cleanQR} — verifying...`;
+    statusEl.textContent = `Verifying ${qr}...`;
 
-    fetch(`/verify_qr/${mode}/${encodeURIComponent(cleanQR)}/`)
+    fetch(`/verify_qr/${mode}/${encodeURIComponent(qr)}/`)
       .then(r => r.json())
       .then(data => {
         if (data.error) {
-          statusEl.textContent = "⚠️ " + data.error;
+          statusEl.textContent = "❌ " + data.error;
           scanning = true;
-          captureLoop();
-        } else {
+          fastScanLoop();
+          return;
+        }
 
+        // CLAIM MODE
         if (mode === "claim") {
-            verificationSection.style.display = "block";
+          let itemsHTML = "";
+          data.items.forEach(it => {
+            itemsHTML += `
+              <div style="margin-left:10px; margin-top:5px;">
+                • <b>${it.name}</b> — Qty: ${it.qty}
+              </div>`;
+          });
 
-            let itemsHTML = "";
-            data.items.forEach(it => {
-                itemsHTML += `
-                    <div style="margin-left:10px; margin-top:5px;">
-                        • <b>${it.name}</b> — Qty: ${it.quantity}
-                    </div>
-                `;
-            });
+          qrResultBox.innerHTML = `
+            <b>Borrower:</b> ${data.borrower}<br>
+            <b>Status:</b> ${data.status}<br>
+            <b>Borrowed:</b> ${data.start} → ${data.end}<br><br>
+            <b>Items Borrowed:</b><br>${itemsHTML}<br>
 
-            // Construct result box (same layout as before)
-            qrResultBox.innerHTML = `
-                <b>Borrower:</b> ${data.borrower}<br>
-                <b>Status:</b> ${data.status}<br>
-                <b>Borrowed:</b> ${data.start} → ${data.end}<br><br>
+            <label><b>Delivered By:</b></label>
+            <input id="deliveredByInput" type="text" placeholder="Enter staff name"
+            style="padding:8px; width:100%; border-radius:6px; border:1px solid #ccc;">
+          `;
 
-                <b>Items Borrowed:</b><br>
-                ${itemsHTML}<br>
+          const btn = document.createElement("button");
+          btn.textContent = "Confirm Claim";
+          btn.className = "btn btn-success";
 
-                <!-- NEW Delivered By input -->
-                <label style="margin-top:10px;"><b>Delivered By:</b></label>
-                <input id="deliveredByInput"
-                      type="text"
-                      placeholder="Enter staff name"
-                      style="padding:8px; width:100%; border-radius:6px; border:1px solid #ccc; margin-top:6px; margin-bottom:12px;">
-            `;
+          btn.onclick = () => {
+            const deliveredBy = document.getElementById("deliveredByInput").value.trim();
+            if (!deliveredBy) {
+              Swal.fire("Error", "Please enter who delivered the item.", "error");
+              return;
+            }
+            updateReservation(mode, qr, deliveredBy);
+          };
 
-            // Create Confirm button
-            const claimBtn = document.createElement("button");
-            claimBtn.textContent = "Confirm Claim";
-            claimBtn.className = "btn btn-success";
-
-            claimBtn.onclick = () => {
-                const deliveredBy = document.getElementById("deliveredByInput").value.trim();
-
-                if (!deliveredBy) {
-                    Swal.fire("Error", "Please enter who delivered the item.", "error");
-                    return;
-                }
-
-                updateReservation(mode, cleanQR, deliveredBy);
-            };
-
-            qrResultBox.appendChild(claimBtn);
+          qrResultBox.appendChild(btn);
         }
 
+        // RETURN MODE
+        if (mode === "return") {
+          verificationSection.style.display = "none";
 
-          if (mode === "return") {
-              verificationSection.style.display = "none";
+          let returnItemsHTML = "";
+          data.items.forEach(it => {
+            returnItemsHTML += `
+              <div style="margin-left:10px; margin-top:5px;">
+                • <b>${it.name}</b> — Qty: ${it.qty}
+              </div>`;
+          });
 
-              let returnItemsHTML = "";
-              data.items.forEach(it => {
-                returnItemsHTML += `<div style="margin-left:10px; margin-top:5px;">
-                    • <b>${it.name}</b> — Qty: ${it.quantity}
-                  </div>`;
-              });
+          borrowerDetails.innerHTML = `
+            <b>Borrower:</b> ${data.borrower}<br>
+            <b>Status:</b> ${data.status}<br>
+            <b>Borrowed:</b> ${data.start} → ${data.end}<br><br>
+            <b>Items:</b><br>${returnItemsHTML}
+          `;
 
-              borrowerDetails.innerHTML = `
-                <b>Borrower:</b> ${data.borrower}<br>
-                <b>Status:</b> ${data.status}<br>
-                <b>Borrowed:</b> ${data.start} → ${data.end}<br><br>
+          feedbackForm.style.display = "block";
 
-                <b>Items:</b><br>
-                ${returnItemsHTML}
-              `;
-
-              feedbackForm.style.display = "block";
-
-              const feedbackBtn = document.getElementById("submitFeedbackBtn");
-              feedbackBtn.onclick = () =>
-                submitFeedback(cleanQR, data.borrower, data.item);
-          }
+          document.getElementById("submitFeedbackBtn").onclick = () =>
+            submitFeedback(qr, data.borrower, data.item);
         }
-      })
-      .catch(err => {
-        statusEl.textContent = "Error verifying QR: " + err;
-        scanning = true;
-        captureLoop();
       });
   }
 
+  // ========== CLAIM UPDATE ==========
   function updateReservation(mode, qr, deliveredBy) {
+    const url = `/update_reservation/${mode}/${encodeURIComponent(qr)}/?delivered_by=${encodeURIComponent(deliveredBy)}`;
 
-      // Build request URL including delivered_by parameter
-      const url = `/update_reservation/${mode}/${encodeURIComponent(qr)}/?delivered_by=${encodeURIComponent(deliveredBy)}`;
-
-      fetch(url, { method: "GET" })
-          .then(r => r.json())
-          .then(data => {
-              beep();
-
-              Swal.fire({
-                  icon: "success",
-                  title: "Borrower Claimed Item ✅",
-                  text: `Claim recorded successfully.\nDelivered by: ${deliveredBy}`,
-                  confirmButtonColor: "#28a745"
-              }).then(() => window.location.href = "/verification/");
-          })
-          .catch(err => {
-              console.error("Error updating reservation:", err);
-              Swal.fire("Error", "Failed to update reservation: " + err.message, "error");
-          });
-  }
-
-  function submitFeedback(qr, borrower, item) {
-    const comment = document.getElementById("feedbackComment").value.trim();
-    const returnStatus = document.getElementById("returnStatus").value;
-
-    if (!returnStatus) {
-      Swal.fire("Error", "Please select a return status.", "error");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("transaction_id", qr);
-    formData.append("comment", comment);
-    formData.append("return_status", returnStatus);
-
-    fetch("/submit_feedback/", { method: "POST", body: formData })
+    fetch(url)
       .then(r => r.json())
-      .then(data => {
+      .then(() => {
         beep();
         Swal.fire({
           icon: "success",
-          title: "Feedback Submitted ✅",
-          text: `${borrower}'s return for '${item}' marked as '${returnStatus}'.`,
-          confirmButtonColor: "#28a745"
+          title: "Borrower Claimed Item",
+          text: `Delivered by: ${deliveredBy}`,
         }).then(() => window.location.href = "/verification/");
-      })
-      .catch(err => {
-        console.error("Error submitting feedback:", err);
-        Swal.fire("Error", "Failed to submit feedback: " + err.message, "error");
+      });
+  }
+
+  // ========== RETURN SUBMIT ==========
+  function submitFeedback(qr, borrower, item) {
+    const formData = new FormData();
+    formData.append("transaction_id", qr);
+    formData.append("comment", document.getElementById("feedbackComment").value.trim());
+    formData.append("return_status", document.getElementById("returnStatus").value);
+
+    fetch("/submit_feedback/", { method: "POST", body: formData })
+      .then(r => r.json())
+      .then(() => {
+        beep();
+        Swal.fire({
+          icon: "success",
+          title: "Feedback Submitted",
+        }).then(() => window.location.href = "/verification/");
       });
   }
 })();
 </script>
+
 </div>
 {% endblock %}

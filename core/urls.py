@@ -108,6 +108,8 @@ urlpatterns = [
     path("damage-report/update-status/<int:report_id>/", views.update_report_status, name='update_report_status'),
     path("api/item/<int:item_id>/admin-borrow/", views.admin_borrow_create, name="admin_borrow_create"),
     path("api/run-scheduler/", run_scheduler_api),
+    path('transaction-history/', views.transaction_log, name='transaction_history')
+
 
 
 

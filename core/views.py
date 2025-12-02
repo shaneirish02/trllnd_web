@@ -28,7 +28,7 @@ from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, parser_classes
 
 # import your models (Reservation was missing before)
-from .models import UserBorrower, Item, Reservation, Feedback, DamageReport, BlockedDate, ReservationItem
+from .models import UserBorrower, Item, Reservation, Feedback, DamageReport, BlockedDate, ReservationItem, TransactionCounter
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth import update_session_auth_hash
 
@@ -67,6 +67,7 @@ from docx.oxml.ns import qn
 from .models import AdminBorrow
 
 
+from core.data.hardcoded_transactions import HARD_CODED_TRANSACTIONS
 
 #FORGOT PASSWORD
 from django.core.mail import send_mail
@@ -427,18 +428,13 @@ def transaction_log(request):
         transactions.append({
             "transaction_id": r.transaction_id,
             "user_name": borrower_name,
-
-            # LISTS for template
             "item_list": item_list,
             "qty_list": qty_list,
-
             "contact": contact,
             "created_at": r.created_at,
-
             "date_receive": fmt(r.date_receive),
             "date_returned": fmt(r.date_returned),
-
-            "delivered_by": "-",
+            "delivered_by": r.delivered_by,
             "status": r.status,
         })
 
@@ -451,23 +447,40 @@ def transaction_log(request):
         transactions.append({
             "transaction_id": ab.transaction_id,
             "user_name": ab.borrower_name,
-
-            # ADMIN HAS ONLY ONE ITEM → wrap in list
-            "item_list": [ab.item.name],
+            "item_list": [ab.item.name],  # ADMIN = single item
             "qty_list": [ab.quantity],
-
             "contact": ab.contact_number,
             "created_at": ab.created_at,
-
             "date_receive": fmt(ab.date),
             "date_returned": fmt(ab.return_date if ab.status == "Returned" else None),
-
             "delivered_by": ab.delivered_by,
             "status": ab.status,
         })
 
     # ===============================
-    # 3. SORT ALL TRANSACTIONS
+    # 3. HARD-CODED OLD DATA
+    # ===============================
+    for h in HARD_CODED_TRANSACTIONS:
+
+        created = timezone.make_aware(
+            datetime.strptime(h["created_at"], "%Y-%m-%d %I:%M %p")
+        )
+
+        transactions.append({
+            "transaction_id": h["transaction_id"],
+            "user_name": h["user_name"],
+            "item_list": h["item_list"],
+            "qty_list": h["qty_list"],
+            "contact": h["contact"],
+            "created_at": created,
+            "date_receive": h["date_receive"] if h["date_receive"] != "—" else None,
+            "date_returned": None,
+            "delivered_by": h["delivered_by"],
+            "status": h["status"],
+        })
+
+    # ===============================
+    # 4. SORT ALL COMBINED TRANSACTIONS
     # ===============================
     transactions = sorted(
         transactions,
@@ -476,7 +489,6 @@ def transaction_log(request):
     )
 
     return render(request, "transaction_history.html", {"transactions": transactions})
-
 
 
 
@@ -962,7 +974,7 @@ def api_register(request):
 
 
             # 🧩 Local development link — works, but user won't see the IP
-            verify_url = f"http://10.147.69.115:8000/api/verify-email/{uid}/{token}/"
+            verify_url = f"http://192.168.1.8:8000/api/verify-email/{uid}/{token}/"
 
 
             # HTML Email Template
@@ -1199,6 +1211,7 @@ def pending_requests_api(request):
     return Response({'html': html})
 
 
+
 @api_view(['GET'])
 @authentication_classes([SessionAuthentication, JWTAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1274,7 +1287,7 @@ def reservation_update_api(request, pk: int):
     new_status = request.data.get('status')
     reason_text = request.data.get('reason', '').strip()
 
-    allowed = {'approved', 'rejected', 'borrowed', 'returned', 'pending'}
+    allowed = {'approved', 'declined', 'in use', 'returned', 'pending', 'cancelled'}
     if new_status not in allowed:
         return Response({'status': 'error', 'message': 'Invalid status'}, status=400)
 
@@ -1316,7 +1329,7 @@ def reservation_update_api(request, pk: int):
     def schedule_smart_alerts(reservation):
         borrower = reservation.userborrower
 
-        # ---------- 1️⃣ Return Reminder
+        # ---------- 1️ Return Reminder
         return_day_before = reservation.date_return - timedelta(days=1)
         dt1 = make_aware(datetime.combine(return_day_before, time(18, 0)))
         dt1 = push_future(dt1)
@@ -1331,7 +1344,7 @@ def reservation_update_api(request, pk: int):
             is_sent=False
         )
 
-        # ---------- 2️⃣ Claim Reminder
+        # ---------- 2️ Claim Reminder
         dt2 = make_aware(datetime.combine(reservation.date_borrowed, time(6, 0)))
         dt2 = push_future(dt2)
 
@@ -1345,7 +1358,7 @@ def reservation_update_api(request, pk: int):
             is_sent=False
         )
 
-        # ---------- 3️⃣ Claim Delay Warning
+        # ---------- 3️ Claim Delay Warning
         dt3 = reservation.created_at + timedelta(hours=1)
         dt3 = push_future(dt3)
 
@@ -1406,7 +1419,7 @@ def reservation_update_api(request, pk: int):
         )
         notif.qr_code.save(f"qr_{r.transaction_id}.png", qr_file)
 
-    elif new_status == "rejected":
+    elif new_status == "declined":
         Notification.objects.create(
             user=r.userborrower,
             reservation=r,
@@ -1673,9 +1686,6 @@ class CreateReservationView(APIView):
                 quantity=qty
             )
 
-            # ❌ REMOVED WRONG GLOBAL STOCK/STATUS MUTATION
-            # item.status = ...
-            # item.save()
 
         try:
             validate_and_add(main_item_id, main_item_qty)
@@ -1820,10 +1830,11 @@ def get_user_notifications(request):
         # ⭐ FIX: Only return notifications that are ACTUALLY SENT
         notifications = (
             Notification.objects
-            .filter(user=borrower, is_sent=True)       # <-- THE FIX
+            .filter(user=borrower, is_sent=True)
             .select_related('reservation')
             .order_by('-created_at')
         )
+
 
         ICONS = {
             "approval": "checkmark-circle-outline",
@@ -2329,6 +2340,7 @@ def verify_qr(request, mode, code):
             "status": r.status,
             "start": r.date_borrowed,
             "end": r.date_return,
+            "delivered_by": r.delivered_by,
             "items": [
                 {
                     "name": it.item_name,
@@ -2384,7 +2396,8 @@ def update_reservation(request, mode, code):
                 reservation=reservation,
                 title="Item Claimed Successfully",
                 message=f"You have successfully claimed the following item(s): {item_list}.",
-                type="claimed"
+                type="claimed",
+                is_sent=True 
             )
 
             return JsonResponse({
@@ -2496,14 +2509,6 @@ def submit_feedback(request):
         reservation.date_returned = timezone.now()
         reservation.save()
 
-        # ------------------------------------------
-        #   RESTORE INVENTORY FOR ALL ITEMS
-        # ------------------------------------------
-        for ri in reservation.items.all():
-            item = ri.item
-            item.qty += ri.quantity
-            item.status = "Available"
-            item.save()
 
         # ------------------------------------------
         #      SEND NOTIFICATION (SMART)
@@ -2514,6 +2519,7 @@ def submit_feedback(request):
             title=notif_title,
             message=notif_message,
             type=notif_type,
+            is_sent=True
         )
 
         return JsonResponse({"message": "Feedback submitted and borrower notified successfully."})
@@ -3521,7 +3527,7 @@ def create_admin_borrow(request, item_id):
     )
 
     # ADD TO HISTORY OUTPUT FORMAT
-    TransactionHistory.objects.create(
+    TransactionCounter.objects.create(
         transaction_id=ab.transaction_id,
         user_name=ab.borrower_name,
         item_name=ab.item.name,
@@ -3761,3 +3767,4 @@ def schedule_smart_alerts(reservation):
         type="warning_claim_delay",
         scheduled_at=one_hour_later,
     )
+

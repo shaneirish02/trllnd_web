@@ -118,11 +118,11 @@
     }
     .btn-approve:hover { background: #16a34a; }
 
-    .btn-decline {
+    .btn-declined {
       background: #ef4444;
       color: #fff;
     }
-    .btn-decline:hover { background: #dc2626; }
+    .btn-declined:hover { background: #dc2626; }
 
     .badge {
       width: fit-content;
@@ -294,21 +294,21 @@
       <!-- FOOTER BUTTONS -->
       <div class="modal-footer">
         <button id="approveBtn" class="btn btn-approve">Approve</button>
-        <button id="declineBtn" class="btn btn-decline">Decline</button>
+        <button id="declinedBtn" class="btn btn-declined">declined</button>
       </div>
 
     </div>
   </div>
 
-  <!-- Decline Reason Modal -->
-  <div id="declineModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+  <!-- declined Reason Modal -->
+  <div id="declinedModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
         justify-content:center; align-items:center; z-index:3000;">
     <div style="background:#fff; padding:20px; border-radius:10px; width:400px;">
-      <h3>Reason for Decline</h3>
-      <textarea id="declineReason" style="width:100%;height:100px;padding:10px;border-radius:6px;border:1px solid #ccc;resize:none;"></textarea>
+      <h3>Reason for declined</h3>
+      <textarea id="declinedReason" style="width:100%;height:100px;padding:10px;border-radius:6px;border:1px solid #ccc;resize:none;"></textarea>
       <div style="margin-top:15px;display:flex;justify-content:flex-end;gap:10px;">
-        <button id="cancelDecline" style="background:#ccc;padding:8px 12px;border:none;border-radius:6px;">Cancel</button>
-        <button id="submitDecline" style="background:#e74c3c;color:#fff;padding:8px 12px;border:none;border-radius:6px;">Submit</button>
+        <button id="canceldeclined" style="background:#ccc;padding:8px 12px;border:none;border-radius:6px;">Cancel</button>
+        <button id="submitdeclined" style="background:#e74c3c;color:#fff;padding:8px 12px;border:none;border-radius:6px;">Submit</button>
       </div>
     </div>
   </div>
@@ -450,13 +450,13 @@
           /* -------- APPROVAL -------- */
           document.getElementById('approveBtn').onclick = () => updateReservation(id, "approved");
 
-          /* -------- DECLINE -------- */
-          document.getElementById('declineBtn').onclick = () => {
-            document.getElementById('declineModal').style.display = "flex";
-            document.getElementById('submitDecline').onclick = () => {
-              const reason = document.getElementById("declineReason").value.trim();
+          /* -------- declined -------- */
+          document.getElementById('declinedBtn').onclick = () => {
+            document.getElementById('declinedModal').style.display = "flex";
+            document.getElementById('submitdeclined').onclick = () => {
+              const reason = document.getElementById("declinedReason").value.trim();
               if (!reason) return alert("Please enter a reason.");
-              updateReservation(id, "rejected", reason);
+              updateReservation(id, "declined", reason);
             };
           };
 
@@ -473,10 +473,10 @@
     };
 
     /* -------------------------------
-      CLOSE DECLINE MODAL
+      CLOSE declined MODAL
     --------------------------------*/
-    document.getElementById('cancelDecline').onclick = () => {
-      document.getElementById('declineModal').style.display = 'none';
+    document.getElementById('canceldeclined').onclick = () => {
+      document.getElementById('declinedModal').style.display = 'none';
     };
 
     /* -------------------------------

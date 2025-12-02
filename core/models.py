@@ -66,7 +66,7 @@ class Reservation(models.Model):
         ('approved', 'Approved'),
         ('in use', 'In Use'),
         ('returned', 'Returned'),
-        ('rejected', 'Rejected'),
+        ('declined', 'Declined'),
         ('cancelled', 'Cancelled'),
     ]
 
