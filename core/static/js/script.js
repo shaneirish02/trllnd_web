@@ -140,11 +140,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 const declineSection = document.getElementById("declineReasonSection");
                 const declineText = document.getElementById("modalDeclineReason");
 
-                if (data.status === "declined" && data.reason) {
-                    declineSection.style.display = "block";
-                    declineText.innerText = data.reason;
-                } else {
-                    declineSection.style.display = "none";
+                if (declineSection && declineText) {
+                    if (data.status === "declined" && data.reason) {
+                        declineSection.style.display = "block";
+                        declineText.innerText = data.reason;
+                    } else {
+                        declineSection.style.display = "none";
+                    }
                 }
 
                 document.getElementById("modalID").src = data.valid_id_image || "";
