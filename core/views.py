@@ -721,7 +721,7 @@ def export_pdf(request):
                 "status": r.status.capitalize(),
             })
 
-    logo_path = request.build_absolute_uri(static("Barangay Kauswagan Logo.png"))
+    logo_path = request.build_absolute_uri(static("barangay_kauswagan_logo.png"))
 
     html = render_to_string(
         "pdf_template.html",
@@ -838,7 +838,7 @@ def export_docx(request):
     left_par = left.paragraphs[0]
     left_par.alignment = WD_ALIGN_PARAGRAPH.CENTER
     try:
-        logo_path = os.path.join(settings.BASE_DIR, "core", "static", "Barangay Kauswagan Logo.png")
+        logo_path = os.path.join(settings.BASE_DIR, "core", "static", "barangay_kauswagan_logo.png")
         run = left_par.add_run()
         run.add_picture(logo_path, width=Inches(1.2))
     except:
