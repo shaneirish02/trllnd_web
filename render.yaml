@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: traillend-backend
+    env: python
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+      python manage.py migrate
+      python manage.py create_admin
+    startCommand: gunicorn traillend_final_web.wsgi:application
+
+    envVars:
+      DJANGO_SETTINGS_MODULE: traillend_final_web.settings
+
+      # These MUST be set manually in Render dashboard
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: ${DEBUG}
+      DATABASE_URL: ${DATABASE_URL}
+      CLOUDINARY_URL: ${CLOUDINARY_URL}
+      FIREBASE_KEY_JSON: ${FIREBASE_KEY_JSON}
+
+      # Gmail SMTP
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+
+      # Auto admin user (Render env)
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+    plan: free
+    region: singapore
