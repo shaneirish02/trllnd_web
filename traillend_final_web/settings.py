@@ -39,9 +39,11 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret")
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
 ALLOWED_HOSTS = [
-    "127.0.0.1", 
+    "127.0.0.1",
     "localhost",
     os.getenv("RENDER_EXTERNAL_HOSTNAME", ""),
+    "traillend-system.site",
+    "www.traillend-system.site",
 ]
 
 # ============================================================
