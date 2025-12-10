@@ -40,9 +40,7 @@ SECRET_KEY = 'django-insecure-g%ec9@2x9!z^j=w$ssd4+n_3+o!hwg1op&-9^4@yo$s#i1)5n6
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['172.22.41.188', 'localhost', '127.0.0.1', '172.22.41.188', '172.22.140.112', '10.180.1.217','192.168.43.118', '172.22.41.188']
-
-
+ALLOWED_HOSTS = ['10.196.129.244', 'localhost', '127.0.0.1']
 
 # Application definition
 
@@ -137,11 +135,12 @@ DATABASES = {
         'USER': 'root',            
         'PASSWORD': '',           
         'HOST': '127.0.0.1',       
-        'PORT': '3306',           
+        'PORT': '3306',  
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",         
+        }
     }
 }
-
-
 
 
 # Password validation

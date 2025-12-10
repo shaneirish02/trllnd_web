@@ -1,172 +1,184 @@
 {% extends 'base.html' %}
 {% block content %}
 <div id="hulam-verifier" style="all: unset;">
+
 <style>
-  :root {
-    --primary: #2563eb;
-    --primary-hover: #1d4ed8;
-    --success: #22c55e;
-    --danger: #ef4444;
-    --gray-light: #f8fafc;
-    --gray-border: #e2e8f0;
-    --text-dark: #1e293b;
-  }
+    :root {
+        --primary: #1A56DB;
+        --warning: #E69500;
+        --success: #17823B;
+        --danger: #C62828;
+        --bg-soft: #F4F6F9;
+        --border-color: #D9DCE1;
+        --text-dark: #222B45;
+    }
 
-  body {
-    font-family: "Poppins", sans-serif;
-    background: var(--gray-light);
-  }
+    body { font-family: "Poppins", sans-serif; background: var(--bg-soft); }
 
-  .verify-container {
-    max-width: 1200px;
-    margin: 40px auto;
-    padding: 30px;
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
-  }
+    .verify-container {
+        max-width: 1250px; margin: 40px auto; padding: 35px;
+        background:#fff; border-radius:14px;
+        box-shadow:0 4px 18px rgba(0,0,0,0.08);
+    }
 
-  h1 {
-    text-align: center;
-    color: var(--text-dark);
-    font-weight: 700;
-    font-size: 1.8rem;
-    margin-bottom: 25px;
-  }
+    h1 { text-align:center; font-size:2rem; font-weight:700; margin-bottom:22px; }
 
-  .btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    color: #fff;
-    font-weight: 500;
-    transition: all 0.2s ease;
-  }
+    .controls { display:flex; justify-content:center; gap:15px; }
 
-  .btn-primary { background: var(--primary); }
-  .btn-primary:hover { background: var(--primary-hover); }
-  .btn-success { background: var(--success); }
-  .btn-danger { background: var(--danger); }
-  input {
-    width: 100%;
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid var(--gray-border);
-    margin-bottom: 10px;
-    font-family: "Poppins";
-  }
-  .controls {
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-    flex-wrap: wrap;
-    margin-bottom: 25px;
-  }
+    .btn {
+        padding:12px 22px; color:white; border:none;
+        border-radius:8px; font-weight:600; cursor:pointer;
+    }
+    .btn-primary{ background:var(--primary); }
+    .btn-warning{ background:var(--warning); }
+    .btn-success{ background:var(--success); }
 
-  .scanner-layout {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 30px;
-    align-items: start;
-  }
+    /* GRID LAYOUT */
+    #scanWrapper { display:none; margin-top:25px; }
+    .scan-grid {
+        display:grid; grid-template-columns:1.7fr 1fr; gap:25px;
+    }
 
-  @media (max-width: 900px) {
-    .scanner-layout { grid-template-columns: 1fr; }
-  }
+    .scan-box { padding:14px; border:2px solid var(--primary); border-radius:12px; background:white; }
 
-  #video {
-    width: 100%;
-    aspect-ratio: 4/3;
-    object-fit: cover;
-    border-radius: 12px;
-    border: 2px solid var(--gray-border);
-  }
+    .video-wrapper {
+        height:420px; border-radius:12px; overflow:hidden;
+        background:black; position:relative;
+    }
 
-  #qrResultBox {
-    background: #f9fafb;
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 0.95rem;
-    margin-bottom: 10px;
-  }
+    #video { width:100%; height:100%; object-fit:cover; }
 
-  #status {
-    font-weight: 600;
-    color: var(--primary);
-  }
+    #scanOverlay {
+        position:absolute; inset:0;
+        border:3px dashed rgba(26,86,219,0.9);
+        border-radius:12px; pointer-events:none;
+        animation:pulse 2s infinite ease-in-out;
+    }
 
-  #feedbackForm {
-    display: none;
-    margin-top: 15px;
-  }
+    @keyframes pulse {
+        0%{opacity:0.3;} 50%{opacity:1;} 100%{opacity:0.3;}
+    }
 
-  .section-header {
-    font-weight: 600;
-    border-left: 4px solid var(--primary);
-    padding-left: 10px;
-    margin: 20px 0 10px;
-    color: var(--text-dark);
-  }
+    .scan-right{
+        background:#F9FAFB; padding:18px;
+        border-radius:12px; border:1px solid var(--border-color);
+    }
 
-  textarea, select {
-    width: 100%;
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid var(--gray-border);
-    margin-bottom: 10px;
-    font-family: "Poppins", sans-serif;
-  }
+    .section-header{
+        font-weight:700; margin-bottom:10px;
+        border-left:4px solid var(--primary);
+        padding-left:10px;
+    }
 
-  .form-actions {
-    display: flex;
-    justify-content: flex-end;
-  }
+    #qrResultBox {
+        padding:15px; background:white;
+        border-radius:8px; border:1px solid var(--border-color);
+    }
 
-  .form-actions button {
-    min-width: 150px;
-  }
+    /* RETURN FORM UI */
+    #feedbackForm {
+        display:none; margin-top:20px;
+        padding:20px; border-radius:12px; border:1px solid var(--border-color);
+        background:white;
+    }
+
+    label { font-weight:600; margin-top:10px; display:block; }
+    textarea, select, input {
+        width:100%; padding:10px; border-radius:6px;
+        border:1px solid var(--border-color); margin-bottom:12px;
+    }
+
+    .hidden { display:none !important; }
 </style>
 
+
+
 <div class="verify-container">
-  <h1>QR Code Verification</h1>
+    <h1>QR Code Verification</h1>
 
-  <div class="controls">
-    <button id="scanClaim" class="btn btn-primary"><i class="fa fa-qrcode"></i> Scan for Claim</button>
-    <button id="scanReturn" class="btn btn-primary"><i class="fa fa-undo"></i> Scan for Return</button>
-  </div>
-
-  <div class="scanner-layout">
-    <img id="video" src="" alt="ESP32-CAM Stream">
-    <canvas id="canvas" hidden></canvas>
-
-    <div id="verificationSection">
-      <h3 class="section-header">Verification Result</h3>
-      <div id="qrResultBox">
-          <p id="status">Idle — waiting for scan</p>
-      </div>
+    <div class="controls" id="buttonSection">
+        <button id="scanClaim" class="btn btn-primary">Scan for Claim</button>
+        <button id="scanReturn" class="btn btn-warning">Scan for Return</button>
     </div>
 
+
+    <!-- SCAN + RESULT -->
+    <div id="scanWrapper">
+        <div class="scan-grid">
+
+            <!-- CAMERA -->
+            <div class="scan-box">
+                <div class="scan-title">📷 Scan QR Code</div>
+                <div class="video-wrapper">
+                    <img id="video">
+                    <div id="scanOverlay"></div>
+                </div>
+                <canvas id="canvas" hidden></canvas>
+            </div>
+
+            <!-- RESULT BOX -->
+            <div class="scan-right">
+                <h3 class="section-header">Verification Result</h3>
+                <div id="qrResultBox">
+                    <p id="status">Idle — waiting…</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- RETURN FORM -->
     <div id="feedbackForm">
-      <div class="section-header">Borrower & Item Details</div>
-      <div id="borrowerDetails"></div>
 
-      <div class="section-header">Feedback</div>
-      <label for="feedbackComment">Comment:</label>
-      <textarea id="feedbackComment" placeholder="Type your feedback..."></textarea>
+        <h3 class="section-header">Borrower & Item Details</h3>
+        <div id="borrowerDetails"></div>
 
-      <label for="returnStatus">Return Status:</label>
-      <select id="returnStatus">
-        <option value="On Time">On Time</option>
-        <option value="Late Return">Late Return</option>
-        <option value="Not Returned">Not Returned</option>
-      </select>
+        <h3 class="section-header">Return Details</h3>
 
-      <div class="form-actions">
-        <button type="button" id="submitFeedbackBtn" class="btn btn-success">Confirm Return</button>
-      </div>
+        <!-- AUTO RETURN STATUS DISPLAY -->
+        <label>Auto-Detected Return Status:</label>
+        <input id="autoReturnStatus" disabled style="background:#f1f1f1;">
+
+        <!-- USER SELECTION: DAMAGE / LOSS / NONE -->
+        <label>Issue Type:</label>
+        <select id="issueType">
+            <option value="none">None</option>
+            <option value="damage">Damage</option>
+            <option value="loss">Loss</option>
+        </select>
+
+        <!-- DAMAGE FIELDS -->
+        <div id="damageFields" class="hidden">
+            <label>Quantity Damage Affected:</label>
+            <input type="number" id="damageQty" min="1">
+
+            <label>Area of Damage:</label>
+            <input type="text" id="damageArea">
+
+            <label>Description of Damage:</label>
+            <textarea id="damageDescription"></textarea>
+        </div>
+
+        <!-- LOSS FIELDS -->
+        <div id="lossFields" class="hidden">
+            <label>Quantity Loss Affected:</label>
+            <input type="number" id="lossQty" min="1">
+
+            <label>Area of Loss:</label>
+            <input type="text" id="lossArea" placeholder="None allowed">
+
+            <label>Reason for Loss:</label>
+            <textarea id="lossReason"></textarea>
+        </div>
+
+        <!-- ALWAYS VISIBLE -->
+        <label>Staff Comment:</label>
+        <textarea id="feedbackComment"></textarea>
+
+        <button id="submitFeedbackBtn" class="btn btn-success">Submit Return</button>
     </div>
-  </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -174,203 +186,309 @@
 
 <script>
 (() => {
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
-  const videoEl = document.getElementById("video");
-  const statusEl = document.getElementById("status");
-  const feedbackForm = document.getElementById("feedbackForm");
-  const qrResultBox = document.getElementById("qrResultBox");
-  const borrowerDetails = document.getElementById("borrowerDetails");
-  const verificationSection = document.getElementById("verificationSection");
 
-  let mode = null;
-  let scanning = false;
-  let lastQR = "";
+    /* CAMERA CONFIG */
+    const ESP32_IP = "10.196.129.200";
+    const CAPTURE_URL = `http://${ESP32_IP}/capture`;
 
-  const ESP32_IP = "10.178.207.200";
-  const CAPTURE_URL = `http://${ESP32_IP}/capture`;
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
 
-  document.getElementById("scanClaim").onclick = () => startScan("claim");
-  document.getElementById("scanReturn").onclick = () => startScan("return");
+    const scanWrapper = document.getElementById("scanWrapper");
+    const buttonSection = document.getElementById("buttonSection");
+    const feedbackForm = document.getElementById("feedbackForm");
 
-  function startScan(type) {
-    mode = type;
-    scanning = true;
-    lastQR = "";
-    feedbackForm.style.display = "none";
-    verificationSection.style.display = "block";
-    statusEl.textContent = "Scanning...";
-    fastScanLoop();
-  }
+    let mode = null;
+    let scanning = false;
+    let lastQR = "";
 
-  async function fastScanLoop() {
-    if (!scanning) return;
+    /* RESET UI */
+    function reset() {
+        scanWrapper.style.display = "none";
+        feedbackForm.style.display = "none";
+        buttonSection.style.display = "flex";
+        statusEl.textContent = "Idle — waiting…";
+    }
+    reset();
 
-    try {
-      const res = await fetch(`${CAPTURE_URL}?t=${performance.now()}`, { cache: "no-store" });
-      const arrayBuffer = await res.arrayBuffer();
-      const blob = new Blob([arrayBuffer], { type: "image/jpeg" });
-      const img = await createImageBitmap(blob);
+    document.getElementById("scanClaim").onclick = () => startScan("claim");
+    document.getElementById("scanReturn").onclick = () => startScan("return");
 
-      // Show live preview
-      videoEl.src = URL.createObjectURL(blob);
 
-      // Prepare QR scanning
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "dontInvert"
-      });
-
-      if (code && code.data) {
-        const match = code.data.match(/T\d+/);
-        if (match) {
-          const cleanQR = match[0];
-
-          if (cleanQR !== lastQR) {
-            lastQR = cleanQR;
-            scanning = false;
-            beep();
-            statusEl.textContent = `QR Detected: ${cleanQR}`;
-            verifyQR(cleanQR);
-            return;
-          }
-        }
-      }
-    } catch (err) {
-      console.log("Scan error:", err);
+    function startScan(type) {
+        mode = type;
+        scanning = true;
+        lastQR = "";
+        buttonSection.style.display = "none";
+        scanWrapper.style.display = "block";
+        statusEl.textContent = "Scanning…";
+        fastScanLoop();
     }
 
-    // FAST scanning interval (150ms)
-    if (scanning) setTimeout(fastScanLoop, 150);
-  }
 
-  function beep() {
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      osc.frequency.value = 1000;
-      osc.connect(audioCtx.destination);
-      osc.start();
-      setTimeout(() => osc.stop(), 100);
-    } catch (_) {}
-  }
+    function beep() {
+        try {
+            const a = new AudioContext();
+            const o = a.createOscillator();
+            o.connect(a.destination);
+            o.start();
+            setTimeout(() => o.stop(), 120);
+        } catch {}
+    }
 
-  // ========== VERIFY QR ==========
-  function verifyQR(qr) {
-    statusEl.textContent = `Verifying ${qr}...`;
 
-    fetch(`/verify_qr/${mode}/${encodeURIComponent(qr)}/`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          statusEl.textContent = "❌ " + data.error;
-          scanning = true;
-          fastScanLoop();
-          return;
-        }
+    /* FAST SCAN LOOP */
+    async function fastScanLoop() {
+        if (!scanning) return;
 
-        // CLAIM MODE
-        if (mode === "claim") {
-          let itemsHTML = "";
-          data.items.forEach(it => {
-            itemsHTML += `
-              <div style="margin-left:10px; margin-top:5px;">
-                • <b>${it.name}</b> — Qty: ${it.qty}
-              </div>`;
-          });
+        try {
+            const res = await fetch(`${CAPTURE_URL}?t=${Date.now()}`);
+            const blob = await res.blob();
+            video.src = URL.createObjectURL(blob);
 
-          qrResultBox.innerHTML = `
-            <b>Borrower:</b> ${data.borrower}<br>
-            <b>Status:</b> ${data.status}<br>
-            <b>Borrowed:</b> ${data.start} → ${data.end}<br><br>
-            <b>Items Borrowed:</b><br>${itemsHTML}<br>
+            const img = await createImageBitmap(blob);
+            canvas.width = img.width; canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
 
-            <label><b>Delivered By:</b></label>
-            <input id="deliveredByInput" type="text" placeholder="Enter staff name"
-            style="padding:8px; width:100%; border-radius:6px; border:1px solid #ccc;">
-          `;
+            const frame = ctx.getImageData(0,0,canvas.width,canvas.height);
+            const qr = jsQR(frame.data, frame.width, frame.height);
 
-          const btn = document.createElement("button");
-          btn.textContent = "Confirm Claim";
-          btn.className = "btn btn-success";
+            if (qr && qr.data) {
+                const match = qr.data.match(/T\d{6}/);
 
-          btn.onclick = () => {
-            const deliveredBy = document.getElementById("deliveredByInput").value.trim();
-            if (!deliveredBy) {
-              Swal.fire("Error", "Please enter who delivered the item.", "error");
-              return;
+                if (match) {
+                    const txid = match[0];
+                    if (txid !== lastQR) {
+                        lastQR = txid;
+                        scanning = false;
+                        beep();
+                        verifyQR(txid);
+                        return;
+                    }
+                }
             }
-            updateReservation(mode, qr, deliveredBy);
-          };
 
-          qrResultBox.appendChild(btn);
-        }
+        } catch {}
 
-        // RETURN MODE
-        if (mode === "return") {
-          verificationSection.style.display = "none";
+        if (scanning) setTimeout(fastScanLoop, 150);
+    }
 
-          let returnItemsHTML = "";
-          data.items.forEach(it => {
-            returnItemsHTML += `
-              <div style="margin-left:10px; margin-top:5px;">
-                • <b>${it.name}</b> — Qty: ${it.qty}
-              </div>`;
-          });
 
-          borrowerDetails.innerHTML = `
+    /* VERIFY QR */
+    function verifyQR(txid) {
+        statusEl.textContent = "Verifying…";
+
+        fetch(`/verify_qr/${mode}/${txid}/`)
+        .then(r => r.json())
+        .then(data => {
+
+            if (data.error)
+                return Swal.fire("Error", data.error, "error").then(() => location.reload());
+
+            /* Claim Guards */
+            if (mode === "claim" && data.status === "In Use")
+                return Swal.fire("Already Claimed", "This reservation was already claimed.", "warning")
+                    .then(() => location.reload());
+
+            /* Return Guards */
+            if (mode === "return" && data.status !== "In Use")
+                return Swal.fire("Cannot Return", "This item is not currently in use.", "error")
+                    .then(() => location.reload());
+
+            if (mode === "claim") showClaimUI(data, txid);
+            if (mode === "return") showReturnUI(data, txid);
+        });
+    }
+
+
+    /* CLAIM UI */
+    function showClaimUI(data, txid) {
+        let itemsHTML = "";
+        data.items.forEach(it => {
+            itemsHTML += `<div>• <b>${it.name}</b> — Qty: ${it.qty}</div>`;
+        });
+
+        document.getElementById("qrResultBox").innerHTML = `
             <b>Borrower:</b> ${data.borrower}<br>
             <b>Status:</b> ${data.status}<br>
             <b>Borrowed:</b> ${data.start} → ${data.end}<br><br>
-            <b>Items:</b><br>${returnItemsHTML}
-          `;
+            <b>Items:</b><br>${itemsHTML}<br>
 
-          feedbackForm.style.display = "block";
+            <label>Delivered By:</label>
+            <input id="deliveredByInput" type="text">
+        `;
 
-          document.getElementById("submitFeedbackBtn").onclick = () =>
-            submitFeedback(qr, data.borrower, data.item);
+        const btn = document.createElement("button");
+        btn.textContent = "Confirm Claim";
+        btn.className = "btn btn-success";
+
+        btn.onclick = () => {
+            const d = document.getElementById("deliveredByInput").value.trim();
+            if (!d) return Swal.fire("Error", "Enter staff name.", "error");
+
+            fetch(`/update_reservation/claim/${txid}/?delivered_by=${encodeURIComponent(d)}`)
+                .then(() => Swal.fire("Success", "Claim recorded!", "success")
+                .then(() => location.reload()));
+        };
+
+        document.getElementById("qrResultBox").appendChild(btn);
+    }
+
+
+    /* RETURN UI */
+function showReturnUI(data, txid) {
+
+    /* KEEP 2-COLUMN LAYOUT */
+    scanWrapper.style.display = "block";
+    feedbackForm.style.display = "none";
+
+    let fullQty = data.items[0].qty;
+
+    /* Build Item List */
+    let itemsHTML = "";
+    data.items.forEach(it => {
+        itemsHTML += `<b>${it.name}</b> — Qty: ${it.qty}<br>`;
+    });
+
+    /* AUTO-DETECT RETURN STATUS */
+    let expected = new Date(data.end);
+    let today = new Date();
+    let auto = "On Time";
+
+    if (today < expected) auto = "Early Return";
+    else if (today > expected) auto = "Late Return";
+
+    /* INSERT COMPLETE RETURN FORM INTO RIGHT PANEL */
+    document.getElementById("qrResultBox").innerHTML = `
+
+        <h3 class="section-header">Borrower & Item Details</h3>
+        <b>Borrower:</b> ${data.borrower}<br>
+        <b>Borrowed:</b> ${data.start} → ${data.end}<br><br>
+
+        <b>Items:</b><br>
+        ${itemsHTML}
+
+        <h3 class="section-header">Return Details</h3>
+
+        <label>Auto-Detected Return Status:</label>
+        <input id="autoReturnStatus" disabled value="${auto}" style="background:#f1f1f1;">
+
+        <label>Issue Type:</label>
+        <select id="issueType">
+            <option value="none">None</option>
+            <option value="damage">Damage</option>
+            <option value="loss">Loss</option>
+        </select>
+
+        <!-- DAMAGE -->
+        <div id="damageFields" class="hidden">
+            <label>Quantity Damage Affected:</label>
+            <input type="number" id="damageQty" min="1">
+
+            <label>Area of Damage:</label>
+            <input type="text" id="damageArea">
+
+            <label>Description of Damage:</label>
+            <textarea id="damageDescription"></textarea>
+        </div>
+
+        <!-- LOSS -->
+        <div id="lossFields" class="hidden">
+            <label>Quantity Loss Affected:</label>
+            <input type="number" id="lossQty" min="1">
+
+            <label>Reason for Loss:</label>
+            <textarea id="lossReason"></textarea>
+        </div>
+
+        <label>Staff Comment:</label>
+        <textarea id="feedbackComment"></textarea>
+
+        <button id="submitFeedbackBtn" class="btn btn-success">Submit Return</button>
+    `;
+
+    /* ISSUE TYPE LOGIC */
+    const issue = document.getElementById("issueType");
+    const damageBox = document.getElementById("damageFields");
+    const lossBox = document.getElementById("lossFields");
+
+    issue.onchange = () => {
+        damageBox.classList.add("hidden");
+        lossBox.classList.add("hidden");
+
+        if (issue.value === "damage") damageBox.classList.remove("hidden");
+        if (issue.value === "loss") lossBox.classList.remove("hidden");
+    };
+
+    /* SUBMIT HANDLER */
+    document.getElementById("submitFeedbackBtn").onclick = () => {
+        const fd = new FormData();
+        fd.append("transaction_id", txid);
+        fd.append("comment", document.getElementById("feedbackComment").value);
+
+        let finalReturnQty = fullQty;
+
+        /* NO ISSUE */
+        if (issue.value === "none") {
+            fd.append("return_status", auto);
         }
-      });
-  }
 
-  // ========== CLAIM UPDATE ==========
-  function updateReservation(mode, qr, deliveredBy) {
-    const url = `/update_reservation/${mode}/${encodeURIComponent(qr)}/?delivered_by=${encodeURIComponent(deliveredBy)}`;
+        /* DAMAGE */
+        if (issue.value === "damage") {
+            let dmg = parseInt(document.getElementById("damageQty").value || 0);
 
-    fetch(url)
-      .then(r => r.json())
-      .then(() => {
-        beep();
-        Swal.fire({
-          icon: "success",
-          title: "Borrower Claimed Item",
-          text: `Delivered by: ${deliveredBy}`,
-        }).then(() => window.location.href = "/verification/");
-      });
-  }
+            if (isNaN(dmg) || dmg < 0)
+                return Swal.fire("Error", "Invalid damage quantity.", "error");
 
-  // ========== RETURN SUBMIT ==========
-  function submitFeedback(qr, borrower, item) {
-    const formData = new FormData();
-    formData.append("transaction_id", qr);
-    formData.append("comment", document.getElementById("feedbackComment").value.trim());
-    formData.append("return_status", document.getElementById("returnStatus").value);
+            if (dmg > fullQty)
+                return Swal.fire("Error", "Damage quantity cannot exceed borrowed qty.", "error");
 
-    fetch("/submit_feedback/", { method: "POST", body: formData })
-      .then(r => r.json())
-      .then(() => {
-        beep();
-        Swal.fire({
-          icon: "success",
-          title: "Feedback Submitted",
-        }).then(() => window.location.href = "/verification/");
-      });
-  }
+            finalReturnQty = fullQty - dmg;
+
+            fd.append("return_status", "Damage");
+            fd.append("damage_qty", dmg);
+            fd.append("damage_area", document.getElementById("damageArea").value);
+            fd.append("damage_description", document.getElementById("damageDescription").value);
+        }
+
+        /* LOSS */
+        if (issue.value === "loss") {
+            let loss = parseInt(document.getElementById("lossQty").value || 0);
+
+            if (isNaN(loss) || loss < 0)
+                return Swal.fire("Error", "Invalid loss quantity.", "error");
+
+            if (loss > fullQty)
+                return Swal.fire("Error", "Loss quantity cannot exceed borrowed qty.", "error");
+
+            finalReturnQty = fullQty - loss;
+
+            fd.append("return_status", "Loss");
+            fd.append("loss_qty", loss);
+            fd.append("loss_area", document.getElementById("lossArea").value);
+            fd.append("loss_reason", document.getElementById("lossReason").value);
+        }
+
+        /* ALWAYS REQUIRED */
+        fd.append("return_qty", finalReturnQty);
+
+        fetch("/submit_feedback/", { method:"POST", body:fd })
+        .then(r => r.json())
+        .then(res => {
+            if (res.error)
+                return Swal.fire("Error", res.error, "error");
+
+            Swal.fire("Success", "Return processed!", "success")
+                .then(() => location.reload());
+        });
+    };
+}
+
+
+
+
 })();
 </script>
 

@@ -1,119 +1,111 @@
-{# templates/pending_requests_list.html #}
-{% comment %} Professional, structured alignment for pending requests {% endcomment %}
+{% if pending_request %}
+    {% for reservation in pending_request %}
+    <li class="pending-item" data-id="{{ reservation.id }}">
+
+      <div class="pending-info">
+
+        {# USER NAME FIRST #}
+        <div class="meta-user">
+          <span class="user-name">{{ reservation.userborrower.full_name|default:"Unknown" }}</span>
+          <span class="dot">•</span>
+
+          {# 🔥 STATUS NOW HAS CORRECT CLASS #}
+          <span class="status {{ reservation.status|lower }}">
+            {{ reservation.status|capfirst }}
+          </span>
+        </div>
+
+        {# ITEM DETAILS #}
+        {% with first_item=reservation.items.all.0 %}
+          {% if first_item %}
+            <div class="item-name">
+                {{ first_item.item.name }}
+                {% if reservation.items.count > 1 %}
+                    <span class="more-items">(+{{ reservation.items.count|add:"-1" }} more)</span>
+                {% endif %}
+            </div>
+          {% else %}
+            <div class="item-name no-items">No items found</div>
+          {% endif %}
+        {% endwith %}
+
+      </div>
+
+      {# PRIORITY BADGE #}
+      {% if reservation.priority == "High" %}
+        <div class="priority-badge high">High</div>
+      {% else %}
+        <div class="priority-badge low">Low</div>
+      {% endif %}
+
+    </li>
+    {% endfor %}
+{% else %}
+<li class="pending-empty">No pending requests</li>
+{% endif %}
+
 
 <style>
-  :root {
-    --brand: #97c6d2;
-    --bg: #ffffff;
-    --border: #e2e8f0;
-    --text-dark: #1e293b;
-    --text-muted: #64748b;
-    --radius: 10px;
-  }
 
-  #pendingList {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    font-family: "Poppins", sans-serif;
-    font-size: 14px;
-  }
-
-  .pending-item {
+.pending-item {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 10px;
-    transition: all 0.2s ease;
-  }
+    align-items: center;
+    background: #ffffffaa;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    border-left: 5px solid #4FC3F7;
+}
 
-  .pending-item:hover {
-    border-color: var(--brand);
-    background-color: #f9fcfe;
-    transform: translateY(-2px);
-    box-shadow: 0 2px 5px rgba(151, 198, 210, 0.15);
-    cursor: pointer;
-  }
-
-  /* Left Section (Text) */
-  .pending-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .item-name {
-    font-weight: 600;
-    color: var(--text-dark);
+/* User name */
+.user-name {
     font-size: 15px;
-    line-height: 1.3;
-  }
+    font-weight: 700;
+    color: #0D47A1;
+}
 
-  .meta {
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-
-  .meta span {
-    margin-right: 8px;
-  }
-
-  /* Right Section (Priority Badge) */
-  .priority-badge {
-    font-size: 12px;
+/* Item */
+.item-name {
+    font-size: 14px;
+    color: #000;
     font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    white-space: nowrap;
-    align-self: center;
-  }
+}
 
-  .priority-badge.high {
-    color: #b91c1c;
-    background: #fde8e8;
-    border-color: #f5c2c2;
-  }
+/* 🔥 Base status styling */
+.status {
+    font-size: 13px;
+    font-weight: 600;
+}
 
-  .priority-badge.low {
-    color: #166534;
-    background: #e7f8ec;
-    border-color: #b3e6c5;
-  }
+/* 🎨 Individual status colors */
+.status.pending {
+    color: #FFA500; /* orange */
+}
 
-  /* Empty State */
-  .pending-empty {
-    text-align: center;
-    padding: 12px;
-    color: var(--text-muted);
-    font-style: italic;
-  }
+.status.approved {
+    color: #4CAF50; /* green */
+}
+
+.status.declined {
+    color: #D32F2F; /* red */
+}
+
+/* Priority badges */
+.priority-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.priority-badge.high {
+    background-color: #FFA500;
+}
+
+.priority-badge.low {
+    background-color: #4FC3F7;
+}
+
 </style>
-
-{% for reservation in pending_request %}
-<li class="pending-item" data-id="{{ reservation.id }}">
-  <div class="pending-info">
-    <div class="item-name">{{ reservation.item.name }}</div>
-    <div class="meta">
-      <span>{{ reservation.userborrower.full_name|default:"Unknown" }}</span>
-      <span>•</span>
-      <span>{{ reservation.status|capfirst }}</span>
-    </div>
-  </div>
-
-  <div class="priority-badge {{ reservation.priority|lower }}">
-    {% if reservation.priority == "High" %}
-      High
-    {% else %}
-      Low
-    {% endif %}
-  </div>
-</li>
-{% empty %}
-<li class="pending-empty">No pending requests</li>
-{% endfor %}

@@ -15,6 +15,9 @@ from django.templatetags.static import static
 import datetime as dt
 from django.utils.timezone import make_aware
 from datetime import datetime, time
+from datetime import timedelta
+from django.db.models import Sum
+import re
 import json
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -67,8 +70,6 @@ from docx.oxml.ns import qn
 from .models import AdminBorrow
 
 
-from core.data.hardcoded_transactions import HARD_CODED_TRANSACTIONS
-
 #FORGOT PASSWORD
 from django.core.mail import send_mail
 from django.contrib import messages
@@ -91,6 +92,69 @@ from .models import Notification, DeviceToken
 from django.core.mail import EmailMultiAlternatives
 from django.utils.html import strip_tags
 
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from .models import Reservation, ReservationItem, UserBorrower, Item
+import json
+
+# --------------------------------------------
+# PRIORITY SCORING FUNCTION (GLOBAL UTILITY)
+# --------------------------------------------
+def compute_priority(reservation):
+    # ---- Event Type Weight (from priority_detail) ----
+    detail = (reservation.priority_detail or "").lower()
+
+    if "funeral" in detail:
+        event_weight = 5
+    elif "emergency" in detail or "barangay" in detail:
+        event_weight = 4
+    elif "inside" in detail:
+        event_weight = 3
+    elif "outside" in detail:
+        event_weight = 2
+    else:
+        event_weight = 1
+
+    # ---- Borrower Behavior Score ----
+    borrower = reservation.userborrower
+    behavior_score = getattr(borrower, "behavior_score", 0)
+
+    # ---- Request Timing Weight ----
+    request_date = reservation.created_at.date()
+    borrow_date = reservation.date_borrowed
+    diff_days = (borrow_date - request_date).days
+
+    if diff_days >= 7:
+        timing_weight = 3
+    elif diff_days >= 3:
+        timing_weight = 2
+    else:
+        timing_weight = 1
+
+    # ---- Urgency Weight (fixed logic) ----
+    urgency_weight = 1
+    for r_item in reservation.items.all():
+
+        reserved = ReservationItem.objects.filter(
+            item=r_item.item,
+            reservation__status__in=['approved', 'in use']
+        ).aggregate(total=Sum("quantity"))["total"] or 0
+
+        available = r_item.item.qty - reserved
+
+        if available <= 1:   # nearly out of stock
+            urgency_weight = 2
+
+    # ---- Final priority formula ----
+    priority = (
+        (event_weight * 0.40) +
+        (behavior_score * 0.30) +
+        (timing_weight * 0.20) +
+        (urgency_weight * 0.10)
+    )
+
+    return round(priority, 2)
 
 
 # -----------------------
@@ -455,28 +519,6 @@ def transaction_log(request):
             "date_returned": fmt(ab.return_date if ab.status == "Returned" else None),
             "delivered_by": ab.delivered_by,
             "status": ab.status,
-        })
-
-    # ===============================
-    # 3. HARD-CODED OLD DATA
-    # ===============================
-    for h in HARD_CODED_TRANSACTIONS:
-
-        created = timezone.make_aware(
-            datetime.strptime(h["created_at"], "%Y-%m-%d %I:%M %p")
-        )
-
-        transactions.append({
-            "transaction_id": h["transaction_id"],
-            "user_name": h["user_name"],
-            "item_list": h["item_list"],
-            "qty_list": h["qty_list"],
-            "contact": h["contact"],
-            "created_at": created,
-            "date_receive": h["date_receive"] if h["date_receive"] != "—" else None,
-            "date_returned": None,
-            "delivered_by": h["delivered_by"],
-            "status": h["status"],
         })
 
     # ===============================
@@ -974,7 +1016,7 @@ def api_register(request):
 
 
             # 🧩 Local development link — works, but user won't see the IP
-            verify_url = f"http://172.22.41.188:8000/api/verify-email/{uid}/{token}/"
+            verify_url = f"http://10.196.129.244:8000/api/verify-email/{uid}/{token}/"
 
 
             # HTML Email Template
@@ -1196,20 +1238,23 @@ def api_login(request):
 @permission_classes([AllowAny])
 def pending_requests_api(request):
     qs = (
-        Reservation.objects
-        .filter(status='pending')
-        .select_related('userborrower')
-        .prefetch_related('items__item')  # <— get all ReservationItem rows
-        .order_by('-id')
-    )
+    Reservation.objects
+    .filter(status='pending')
+    .select_related('userborrower')
+    .prefetch_related('items__item')
+    .order_by('-priority_score', '-created_at')   # IMPORTANT
+)
+
 
     html = render_to_string(
         'pending_requests_list.html',
         {'pending_request': qs},
         request=request
     )
-    return Response({'html': html})
-
+    return Response({
+        'html': html,
+        'count': qs.count()
+    })
 
 
 @api_view(['GET'])
@@ -1247,6 +1292,12 @@ def reservation_detail_api(request, pk: int):
             "image": request.build_absolute_uri(it.item.image.url)
                      if it.item and it.item.image else ""
         })
+        latest_decline = Notification.objects.filter(
+            reservation=r,
+            type="rejection"
+        ).order_by("-created_at").first()
+
+        decline_reason = latest_decline.reason if latest_decline else ""
 
     data = {
         "id": r.id,
@@ -1261,16 +1312,97 @@ def reservation_detail_api(request, pk: int):
         "priority_display": r.priority,   # JS expects "priority_display"
         "message": r.message or "No message provided",
         "status": r.status,
-
+        "reason": decline_reason,
+        
         "letter_image": request.build_absolute_uri(r.letter_image.url) 
                         if r.letter_image else "",
         "valid_id_image": request.build_absolute_uri(r.valid_id_image.url) 
                         if r.valid_id_image else "",
-
         "items": items
     }
 
     return Response(data)
+    
+
+# --------------------------------------------
+# PRIORITY CONFLICT DETECTION FUNCTION
+# --------------------------------------------
+def detect_conflicts_and_notify(reservation):
+    main_start = reservation.date_borrowed
+    main_end = reservation.date_return
+
+    for r_item in reservation.items.all():
+
+        item = r_item.item
+        approved_qty = r_item.quantity
+        total_stock = item.qty
+
+        # Remaining stock AFTER the approved reservation consumes quantity
+        remaining_qty = total_stock - approved_qty
+
+        # Find overlapping pending reservations for the same item + dates
+        overlapping = ReservationItem.objects.filter(
+            item=item,
+            reservation__status='pending',
+            reservation__date_borrowed__lte=main_end,
+            reservation__date_return__gte=main_start
+        ).exclude(reservation=reservation)
+
+        # Recommended dates (computed once)
+        alt_dates = find_alternative_dates(item, main_start, main_end)
+
+        for other in overlapping:
+            other_res = other.reservation
+            borrower = other_res.userborrower
+            requested_qty = other.quantity
+
+            # -------------------------------------
+            # ⭐ ONLY notify if requested exceeds remaining
+            # -------------------------------------
+            if requested_qty > remaining_qty:
+
+                Notification.objects.create(
+                    user=borrower,
+                    reservation=other_res,
+                    title="Date Conflict Detected",
+                    message=(
+                        f"Your reservation for {main_start} → {main_end} cannot be accommodated "
+                        f"because the item stock is insufficient.\n\n"
+                        f"Requested: {requested_qty}, Available: {remaining_qty}\n\n"
+                        f"Recommended available dates:\n"
+                        f"{', '.join(alt_dates) if alt_dates else 'No alternative dates available'}"
+                    ),
+                    type="conflict_alert",
+                    is_sent=True
+                )
+
+
+
+def find_alternative_dates(item, start, end, limit=5):
+    suggestions = []
+
+    check_start = end + timedelta(days=1)
+    day = check_start
+
+    for _ in range(60):  # check 60 future days
+        overlap = ReservationItem.objects.filter(
+            item=item,
+            reservation__status__in=['pending', 'approved', 'in use'],
+            reservation__date_borrowed__lte=day,
+            reservation__date_return__gte=day
+        ).aggregate(total=Sum("quantity"))["total"] or 0
+
+        if overlap < item.qty:
+            suggestions.append(day.isoformat())
+
+            if len(suggestions) >= limit:
+                break
+
+        day += timedelta(days=1)
+
+    return suggestions
+
+
 
 
 @api_view(['POST'])
@@ -1285,7 +1417,8 @@ def reservation_update_api(request, pk: int):
     )
 
     new_status = request.data.get('status')
-    reason_text = request.data.get('reason', '').strip()
+    reason_text = (request.data.get('reason') or '').strip()
+
 
     allowed = {'approved', 'declined', 'in use', 'returned', 'pending', 'cancelled'}
     if new_status not in allowed:
@@ -1305,7 +1438,10 @@ def reservation_update_api(request, pk: int):
     if new_status == "approved":
         r.approved_at = timezone.now()
 
-    elif new_status == "borrowed":
+            # ⭐ Automatically detect conflicts + notify borrowers
+        detect_conflicts_and_notify(r)
+
+    elif new_status == "in use":
         r.date_receive = timezone.now()
 
     elif new_status == "returned":
@@ -1598,7 +1734,7 @@ class CheckAvailabilityView(APIView):
         # ===== TOTAL RESERVED (using ReservationItem — NEW SYSTEM) =====
         overlap = ReservationItem.objects.filter(
             item=item,
-            reservation__status__in=["pending", "approved", "in use"],
+            reservation__status__in=["approved", "in use"],
             reservation__date_borrowed__lte=end_date,
             reservation__date_return__gte=start_date,
         ).aggregate(total=Sum("quantity"))
@@ -1633,8 +1769,21 @@ class CreateReservationView(APIView):
             start_date = date.fromisoformat(request.data.get("start_date"))
             end_date = date.fromisoformat(request.data.get("end_date"))
 
-            priority = request.data.get("priority", "Low")
+            
             priority_detail = request.data.get("priority_detail", "")
+            other_reason = request.data.get("other_reason", "")
+            
+            if priority_detail == "Others" and other_reason:
+                priority_detail = other_reason
+
+            # Define which reasons count as HIGH priority
+            HIGH_CATEGORIES = ["Funeral", "Government Activities"]
+
+            if priority_detail in HIGH_CATEGORIES:
+                priority = "High"
+            else:
+                priority = "Low"
+                
             message = request.data.get("message", "")
 
             letter_img = request.FILES.get("letter_image")
@@ -1648,6 +1797,7 @@ class CreateReservationView(APIView):
         if start_date > end_date:
             return Response({"detail": "Invalid date range"}, status=400)
 
+        # ---- CREATE RESERVATION ----
         reservation = Reservation.objects.create(
             userborrower=borrower,
             date_borrowed=start_date,
@@ -1663,12 +1813,15 @@ class CreateReservationView(APIView):
 
         reservation.save()
 
+        # ------------------------------------------------------
+        # INTERNAL VALIDATOR (DO NOT TOUCH)
+        # ------------------------------------------------------
         def validate_and_add(item_id, qty):
             item = Item.objects.select_for_update().get(item_id=item_id)
 
             overlapping = ReservationItem.objects.filter(
                 item=item,
-                reservation__status__in=["pending", "approved", "in use"],
+                reservation__status__in=["approved", "in use"],
                 reservation__date_borrowed__lte=end_date,
                 reservation__date_return__gte=start_date,
             ).aggregate(total=Sum("quantity"))
@@ -1686,13 +1839,14 @@ class CreateReservationView(APIView):
                 quantity=qty
             )
 
-
+        # ---- ADD MAIN ITEM ----
         try:
             validate_and_add(main_item_id, main_item_qty)
         except Exception as e:
             reservation.delete()
             return Response({"detail": str(e)}, status=409)
 
+        # ---- ADD EXTRA ITEMS ----
         for it in added_items:
             try:
                 validate_and_add(int(it["id"]), int(it["qty"]))
@@ -1700,6 +1854,16 @@ class CreateReservationView(APIView):
                 reservation.delete()
                 return Response({"detail": str(e)}, status=409)
 
+        # ------------------------------------------------------
+        # ⭐ COMPUTE PRIORITY SCORE (FINAL FIX)
+        # ------------------------------------------------------
+        reservation.refresh_from_db()  # ensure items exist
+        reservation.priority_score = compute_priority(reservation)
+        reservation.save()
+
+        # ------------------------------------------------------
+        # SEND INITIAL NOTIFICATION (unchanged)
+        # ------------------------------------------------------
         Notification.objects.create(
             user=borrower,
             reservation=reservation,
@@ -1711,12 +1875,9 @@ class CreateReservationView(APIView):
 
         return Response({
             "success": True,
-            "reservation_id": reservation.id,
-            "transaction_id": reservation.transaction_id
+            "transaction_id": reservation.transaction_id,
+            "priority_score": reservation.priority_score  # return priority to mobile
         }, status=201)
-
-
-
 
 @csrf_exempt
 def user_profile(request):
@@ -2110,7 +2271,7 @@ def user_reservations(request):
             'priority': r.priority,
             'date_borrowed': r.date_borrowed.strftime('%Y-%m-%d') if r.date_borrowed else None,
             'date_return': r.date_return.strftime('%Y-%m-%d') if r.date_return else None,
-            'reason_for_borrowing': r.message or '',   # <-- Correct name
+            "reason_for_borrowing": r.priority_detail,
             'items': items_list,
         })
 
@@ -2158,6 +2319,9 @@ def cancel_reservation(request, pk):
         return Response({'success': False, 'message': 'Reservation not found.'}, status=404)
 
 # NEW — Dynamic availability for a single date
+# ----------------------------------------------------------
+# ITEM AVAILABILITY (Single Date)
+# ----------------------------------------------------------
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def item_availability(request, item_id):
@@ -2181,7 +2345,7 @@ def item_availability(request, item_id):
 
     overlapping = ReservationItem.objects.filter(
         item=item,
-        reservation__status__in=["pending", "approved", "in use"],
+        reservation__status__in=["approved", "in use"],
         reservation__date_borrowed__lte=selected_date,
         reservation__date_return__gte=selected_date,
     ).aggregate(total=Sum("quantity"))
@@ -2217,12 +2381,15 @@ def item_availability(request, item_id):
     })
 
 
+
+# ----------------------------------------------------------
+# ITEM AVAILABILITY MAP (60-day range)
+# ----------------------------------------------------------
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def item_availability_map(request, item_id):
     from datetime import date, timedelta
 
-    # 1. Load the item
     try:
         item = Item.objects.get(pk=item_id)
     except Item.DoesNotExist:
@@ -2230,13 +2397,11 @@ def item_availability_map(request, item_id):
 
     total_capacity = item.qty
 
-    # 2. Load ALL ReservationItem rows referring to this item
     res_items = ReservationItem.objects.filter(
         item=item,
-        reservation__status__in=["pending", "approved", "in use"]
+        reservation__status__in=["approved", "in use"]
     ).select_related("reservation")
 
-    # Convert to easier list
     reservations = [
         {
             "start": ri.reservation.date_borrowed,
@@ -2248,7 +2413,6 @@ def item_availability_map(request, item_id):
         for ri in res_items
     ]
 
-    # 3. Admin borrows
     admin_borrows = list(
         AdminBorrow.objects.filter(
             item=item,
@@ -2257,21 +2421,16 @@ def item_availability_map(request, item_id):
                  "contact_number", "address", "purpose", "delivered_by", "id", "transaction_id")
     )
 
-    # 4. Blocked dates
     blocked_dates = set(b.date for b in BlockedDate.objects.filter(item=item))
 
-    # 5. Build 60-day calendar map
     start = date.today()
     end = start + timedelta(days=60)
-
     days = {}
     current = start
 
     while current <= end:
-
         key = current.isoformat()
 
-        # BLOCKED?
         if current in blocked_dates:
             days[key] = {
                 "status": "blocked",
@@ -2282,7 +2441,6 @@ def item_availability_map(request, item_id):
             current += timedelta(days=1)
             continue
 
-        # RESERVATIONS (multi-item safe)
         reserved_qty = 0
         daily_reservations = []
         for r in reservations:
@@ -2290,13 +2448,10 @@ def item_availability_map(request, item_id):
                 reserved_qty += r["quantity"]
                 daily_reservations.append(r)
 
-        # ADMIN borrows
         admin_used = 0
         admin_full = []
         for ab in admin_borrows:
-            s = ab["date"]
-            e = ab["return_date"]
-            if s <= current <= e:
+            if ab["date"] <= current <= ab["return_date"]:
                 admin_used += ab["quantity"]
                 admin_full.append(ab)
 
@@ -2313,12 +2468,12 @@ def item_availability_map(request, item_id):
 
         current += timedelta(days=1)
 
-    # Final output
     return Response({
         "item_id": item.item_id,
         "item_name": item.name,
         "calendar": days
-    }, status=200)
+    })
+
 
 
 
@@ -2326,26 +2481,42 @@ def get_total_capacity(item):
     return item.qty or 0
 
 
-
 @csrf_exempt
 def verify_qr(request, mode, code):
     try:
-        if "T" in code:
-            code = "T" + code.split("T")[-1].split()[0]
+        # Extract T + 6 digits from FULL QR TEXT
+        match = re.search(r"T\d{6}", code)
+        if not match:
+            return JsonResponse({"error": "Invalid QR format"}, status=400)
 
-        r = Reservation.objects.prefetch_related('items__item').get(transaction_id=code)
+        code = match.group(0)
+
+        r = Reservation.objects.prefetch_related("items__item").get(transaction_id=code)
+
+        # FRONTEND-FRIENDLY STATUS
+        status_map = {
+            "approved": "Approved",
+            "in use": "In Use",
+            "returned": "Returned",
+            "pending": "Pending",
+            "declined": "Declined",
+            "cancelled": "Cancelled"
+        }
+        ui_status = status_map.get(r.status.lower(), r.status)
 
         data = {
             "borrower": r.userborrower.full_name,
-            "status": r.status,
+            "status": ui_status,
             "start": r.date_borrowed,
             "end": r.date_return,
             "delivered_by": r.delivered_by,
+
+            # Return UI needs these:
+            "can_claim": (mode == "claim" and r.status.lower() == "approved"),
+            "can_return": (mode == "return" and r.status.lower() == "in use"),
+
             "items": [
-                {
-                    "name": it.item_name,
-                    "qty": it.quantity
-                }
+                {"name": it.item_name, "qty": it.quantity}
                 for it in r.items.all()
             ]
         }
@@ -2354,69 +2525,82 @@ def verify_qr(request, mode, code):
 
     except Reservation.DoesNotExist:
         return JsonResponse({"error": "QR not recognized"}, status=404)
+
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
     
 @csrf_exempt
 def update_reservation(request, mode, code):
-    """
-    Updates reservation after QR scan.
-    Accepts delivered_by for CLAIM.
-    """
-
     try:
-        # Normalize transaction ID
-        if "T" in code:
-            parts = code.split("T")
-            code = "T" + parts[-1].split()[0]
+        # Extract transaction ID
+        match = re.search(r"T\d{6}", code)
+        if not match:
+            return JsonResponse({"error": "Invalid QR format"}, status=400)
 
-        reservation = Reservation.objects.get(transaction_id=code.strip())
+        code = match.group(0)
 
-        # READ delivered_by (only used in claim mode)
+        reservation = Reservation.objects.prefetch_related("items").get(transaction_id=code)
         delivered_by = request.GET.get("delivered_by", "").strip()
 
-        # CLAIM MODE → borrower receives the items
+        # -------------------------
+        # CLAIM MODE
+        # -------------------------
         if mode.lower() == "claim":
+
+            if reservation.status.lower() == "in use":
+                return JsonResponse({"error": "This reservation is already claimed."}, status=400)
+
+            if reservation.status.lower() != "approved":
+                return JsonResponse({"error": "This reservation is not approved for claiming."}, status=400)
 
             if not delivered_by:
                 return JsonResponse({"error": "Delivered By is required."}, status=400)
 
+            # ==============================
+            # FIXED: CLAIM DATE UPDATES
+            # ==============================
+            today = timezone.now().date()
             reservation.status = "in use"
             reservation.date_receive = timezone.now()
-            reservation.delivered_by = delivered_by  # SAVE WHO DELIVERED
+
+            reservation.borrow_date = today
+            reservation.actual_claimed_date = today
+
+            # Fill expected return date if empty
+            reservation.expected_return_date = reservation.date_return
+
+            reservation.delivered_by = delivered_by
             reservation.save()
 
-            # Prepare item list
-            item_names = [ri.item_name for ri in reservation.items.all()]
-            item_list = ", ".join(item_names)
+            item_list = ", ".join([i.item_name for i in reservation.items.all()])
 
-            # Send notification to app
+            # Notify
             Notification.objects.create(
                 user=reservation.userborrower,
                 reservation=reservation,
-                title="Item Claimed Successfully",
-                message=f"You have successfully claimed the following item(s): {item_list}.",
+                title="Item Claimed",
+                message=f"You have claimed: {item_list}",
                 type="claimed",
-                is_sent=True 
+                is_sent=True
             )
 
-            return JsonResponse({
-                "message": f"{reservation.userborrower.full_name} claimed items.",
-                "delivered_by": delivered_by
-            })
+            return JsonResponse({"message": "Claim successful"})
 
-        # RETURN MODE → borrower returns items
+        # -------------------------
+        # RETURN MODE
+        # -------------------------
         elif mode.lower() == "return":
-            reservation.status = "returned"
-            reservation.date_returned = timezone.now()
-            reservation.save()
 
-            return JsonResponse({
-                "message": f"{reservation.userborrower.full_name} returned items."
-            })
+            if reservation.status.lower() != "in use":
+                return JsonResponse({"error": "This item cannot be returned."}, status=400)
+
+            # Do not finalize here — submit_feedback does that
+            return JsonResponse({"message": "Return validated. Proceed to form."})
 
         else:
-            return JsonResponse({"error": "Invalid mode."}, status=400)
+            return JsonResponse({"error": "Invalid mode"}, status=400)
 
     except Reservation.DoesNotExist:
         return JsonResponse({"error": "Reservation not found"}, status=404)
@@ -2424,94 +2608,199 @@ def update_reservation(request, mode, code):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
+
+
 @csrf_exempt
 def submit_feedback(request):
-    """
-    Handles admin feedback submission after a borrower returns multiple items.
-    """
     try:
+        import re
+
         if request.method != "POST":
-            return JsonResponse({"error": "Invalid request method"}, status=400)
+            return JsonResponse({"error": "Invalid request"}, status=400)
 
-        transaction_id = request.POST.get("transaction_id")
-        comment = request.POST.get("comment", "")
-        return_status = request.POST.get("return_status")
+        # ------------------------------------------
+        # CLEAN TRANSACTION ID
+        # ------------------------------------------
+        raw_id = request.POST.get("transaction_id", "")
+        match = re.search(r"T\d{6}", raw_id)
+        if not match:
+            return JsonResponse({"error": "Invalid transaction ID"}, status=400)
+        transaction_id = match.group(0)
 
-        if not transaction_id or not return_status:
-            return JsonResponse({"error": "Missing required fields"}, status=400)
+        # BASIC FIELDS
+        comment = request.POST.get("comment", "").strip()
+        return_status = request.POST.get("return_status", "").strip()  # None / Damage / Loss / On Time / Late
 
+        # ISSUE-TYPE FIELDS
+        damage_qty = request.POST.get("damage_qty")
+        damage_area = request.POST.get("damage_area")
+        damage_description = request.POST.get("damage_description")
+
+        loss_qty = request.POST.get("loss_qty")
+        loss_area = request.POST.get("loss_area")
+        loss_reason = request.POST.get("loss_reason")
+
+        return_qty = request.POST.get("return_qty", "0")
+
+        # ------------------------------------------
+        # FETCH RESERVATION + BORROWER
+        # ------------------------------------------
         reservation = Reservation.objects.prefetch_related("items__item").get(transaction_id=transaction_id)
         borrower = reservation.userborrower
+        items = reservation.items.all()
+        item = items.first().item
 
-        # MULTI-ITEM LIST
-        item_names = [ri.item_name for ri in reservation.items.all()]
-        item_list = ", ".join(item_names) if item_names else "your items"
+        total_qty = sum(i.quantity for i in items)
 
-        # Save feedback
-        Feedback.objects.create(
+        # ------------------------------------------
+        # VALIDATE RETURN QUANTITY
+        # ------------------------------------------
+        try:
+            return_qty = int(return_qty)
+            if return_qty < 0 or return_qty > total_qty:
+                return JsonResponse({"error": "Invalid return quantity"}, status=400)
+        except:
+            return JsonResponse({"error": "Return quantity must be numeric"}, status=400)
+
+        missing_qty = total_qty - return_qty
+
+        # ------------------------------------------
+        # CREATE FEEDBACK ENTRY
+        # ------------------------------------------
+        fb = Feedback.objects.create(
             reservation=reservation,
             userborrower=borrower,
             comment=comment,
-            return_status=return_status,
+            return_status=return_status
         )
 
         # ------------------------------------------
-        #        NOTIFICATION LOGIC (MULTI ITEMS)
+        # AUTO COMPUTE RETURN TIMELINE
         # ------------------------------------------
-        notif_type = "returned"
+        today = timezone.now().date()
+        due_date = reservation.date_return
 
-        if return_status == "Late Return":
-            borrower.late_count += 1
+        if today < due_date:
+            auto_status = "Early Return"
+            late_days = 0
+        elif today == due_date:
+            auto_status = "On Time"
+            late_days = 0
+        else:
+            late_days = (today - due_date).days
+            auto_status = f"Late Return ({late_days} days)"
 
-            if borrower.late_count == 2:
-                notif_title = "Warning: You now have 2 late returns"
-                notif_message = (
-                    "You now have 2 late return instances.\n"
-                    "Once you reach 3, you will be marked as a Bad Borrower and lose access to TrailLend."
-                )
-                notif_type = "warning"
+        fb.days_late = late_days
+        fb.loss_qty = missing_qty
+        fb.save()
 
-            elif borrower.late_count >= 3:
-                borrower.borrower_status = "Bad"
-                notif_title = "Account Restricted: Bad Borrower Status"
-                notif_message = (
-                    "You now have 3 late returns.\n"
-                    "Your account is now restricted and you can no longer borrow items."
-                )
-                notif_type = "restricted"
+        # ------------------------------------------
+        # VIOLATION SCORING
+        # ------------------------------------------
+        violation_points = 0
 
+        if late_days > 0:
+            if late_days <= 3:
+                violation_points += 1
+            elif late_days <= 7:
+                violation_points += 3
             else:
-                notif_title = "Late Return Notice"
-                notif_message = f"You returned {item_list} late."
-                notif_type = "returned"
+                violation_points += 5
 
-        elif return_status == "Not Returned":
-            borrower.borrower_status = "Bad"
-            borrower.late_count = 3
-            notif_title = "Item Not Returned – Account Restricted"
-            notif_message = (
-                f"You did not return {item_list}. Your account is now restricted.\n"
-                "Please contact GSO immediately."
+        # MISSING ITEMS
+        if return_status == "Missing" and missing_qty > 0:
+            violation_points += 5
+
+        # ------------------------------------------
+        # DAMAGE CASE
+        # ------------------------------------------
+        if return_status == "Damage":
+            if not damage_qty or not damage_area or not damage_description:
+                return JsonResponse({"error": "Damage details incomplete"}, status=400)
+
+            DamageReport.objects.create(
+                reported_by=borrower,
+                reservation=reservation,
+                item=item,
+                report_type="Damage",
+                quantity_affected=int(damage_qty),
+                location=damage_area.strip(),
+                description=damage_description.strip()
             )
-            notif_type = "restricted"
+
+            reservation.report_type = "Damage"
+            violation_points += 4
+
+        # ------------------------------------------
+        # LOSS CASE
+        # ------------------------------------------
+        elif return_status == "Loss":
+            if not loss_qty or not loss_reason:
+                return JsonResponse({"error": "Loss details incomplete"}, status=400)
+
+            DamageReport.objects.create(
+                reported_by=borrower,
+                reservation=reservation,
+                item=item,
+                report_type="Loss",
+                quantity_affected=int(loss_qty),
+                location=loss_area if loss_area else "N/A",
+                description=loss_reason.strip()
+            )
+
+            item.qty = max(0, item.qty - int(loss_qty))
+            item.save()
+
+            reservation.report_type = "Loss"
+            violation_points += 6
 
         else:
-            notif_title = "Returned On Time"
-            notif_message = f"Thank you for returning {item_list} on time!"
+            # NONE
+            reservation.report_type = "None"
+
+        # ------------------------------------------
+        # UPDATE BORROWER SCORE
+        # ------------------------------------------
+        borrower.behavior_total_score += violation_points
+        borrower.behavior_score = borrower.behavior_total_score
+        borrower.violation_count += 1
+
+        if borrower.behavior_total_score < 5:
+            borrower.borrower_status = "Good"
             notif_type = "returned"
+            notif_title = "Return Successful"
+            notif_message = "Thank you for returning your borrowed items."
+
+        elif borrower.behavior_total_score < 10:
+            borrower.borrower_status = "Warning"
+            notif_type = "warning"
+            notif_title = "Warning Issued"
+            notif_message = "You now have multiple violations."
+
+        else:
+            borrower.borrower_status = "Bad"
+            notif_type = "restricted"
+            notif_title = "Account Restricted"
+            notif_message = "Your borrowing privileges are now restricted."
 
         borrower.save()
 
         # ------------------------------------------
-        #     UPDATE RESERVATION STATUS
+        # FINALIZE RESERVATION TIMELINE
         # ------------------------------------------
-        reservation.status = "returned"
+        if not reservation.expected_return_date:
+            reservation.expected_return_date = reservation.date_return
+
+        reservation.actual_return_date = timezone.now().date()
         reservation.date_returned = timezone.now()
+        reservation.missing_qty = missing_qty
+        reservation.returned_qty = return_qty
+
+        reservation.status = "returned"
         reservation.save()
 
-
         # ------------------------------------------
-        #      SEND NOTIFICATION (SMART)
+        # SEND NOTIFICATION
         # ------------------------------------------
         Notification.objects.create(
             user=borrower,
@@ -2522,12 +2811,92 @@ def submit_feedback(request):
             is_sent=True
         )
 
-        return JsonResponse({"message": "Feedback submitted and borrower notified successfully."})
+        return JsonResponse({
+            "message": "Return processed successfully",
+            "late_days": late_days,
+            "missing_qty": missing_qty,
+            "behavior_score": borrower.behavior_total_score
+        })
 
     except Reservation.DoesNotExist:
         return JsonResponse({"error": "Reservation not found"}, status=404)
+
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+        # ============================================================
+# BEHAVIOR PATTERN DETECTION ENGINE
+# ============================================================
+def analyze_borrower_patterns(borrower):
+    """
+    Auto-adjusts behavior_score based on long-term patterns.
+    This runs after every feedback submission.
+    """
+
+    # ---------- 1. Count last 5 returns ----------
+    recent_feedback = Feedback.objects.filter(
+        userborrower=borrower
+    ).order_by('-created_at')[:5]
+
+    late_count = sum(1 for fb in recent_feedback if fb.return_status == "Late Return")
+    on_time_count = sum(1 for fb in recent_feedback if fb.return_status == "On Time")
+    not_returned_count = sum(1 for fb in recent_feedback if fb.return_status == "Not Returned")
+
+    # ---------- 2. Count damage/loss reports ----------
+    damage_reports = DamageReport.objects.filter(
+        reported_by=borrower
+    ).count()
+
+    loss_reports = DamageReport.objects.filter(
+        reported_by=borrower,
+        report_type="Loss"
+    ).count()
+
+    behavior_change = 0
+
+    # =====================================================
+    # PATTERN 1: Frequent Late Returns
+    # =====================================================
+    if late_count >= 3:
+        # borrower is repeatedly late
+        behavior_change -= 2  
+
+    # =====================================================
+    # PATTERN 2: Multiple Damages or Losses
+    # =====================================================
+    if damage_reports >= 2:
+        behavior_change -= 3  # repeated damages
+
+    if loss_reports >= 1:
+        behavior_change -= 4  # loss is a major violation
+
+    # =====================================================
+    # PATTERN 3: Perfect On-Time streak (reward)
+    # =====================================================
+    if on_time_count >= 5:
+        behavior_change += 3  # encourage good borrowers
+
+    # =====================================================
+    # APPLY BEHAVIOR CHANGES
+    # =====================================================
+    if behavior_change != 0:
+        borrower.behavior_score += behavior_change
+
+        # Update borrower status based on thresholds
+        if borrower.behavior_score >= 0:
+            borrower.borrower_status = "Good"
+
+        elif -9 <= borrower.behavior_score < 0:
+            borrower.borrower_status = "Warning"
+
+        else:
+            borrower.borrower_status = "Bad"
+
+        borrower.save()
+
+
+
+    return behavior_change
 
 
 
@@ -2535,20 +2904,40 @@ def submit_feedback(request):
 @csrf_exempt
 def monthly_reset(request=None):
     """
-    Resets all borrower late counts and restores 'Good' status at the start of each month.
-    Can be triggered manually or via a cron job.
+    Smart monthly reset:
+    - Clears late_count
+    - Gives small behavior recovery (if not Bad)
+    - Resets Warning borrowers back to Good
+    - Bad borrowers remain restricted
     """
     try:
         borrowers = UserBorrower.objects.all()
+
         for b in borrowers:
+
+            # 1️⃣ Reset late count every month
             b.late_count = 0
-            # Only restore if no damage or missing item flags exist
-            if b.borrower_status != "Bad":
+
+            # 2️⃣ Slight positive recovery for Good/Warning users
+            if b.borrower_status in ["Good", "Warning"]:
+                b.behavior_score += 2
+
+            # 3️⃣ Warning -> Good
+            if b.borrower_status == "Warning":
                 b.borrower_status = "Good"
+
+            # 4️⃣ If behavior_score recovered above 0 → Good
+            if b.behavior_score >= 0 and b.borrower_status != "Bad":
+                b.borrower_status = "Good"
+
+            # Bad stays Bad — must be manually reviewed
             b.save()
+
         return JsonResponse({"message": "Monthly reset completed successfully."})
+
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
 
 def damage_loss_report_list(request):
     reports = DamageReport.objects.select_related('reported_by').order_by('-date_reported')
@@ -2681,22 +3070,14 @@ def get_in_use_items(request):
 
 # ITEM CALENDAR BLOCKDATE
 
+# ----------------------------------------------------------
+# FULLCALENDAR WEB COMPATIBLE CALENDAR
+# ----------------------------------------------------------
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_item_calendar(request, item_id):
-    """
-    COMPATIBLE VERSION for WEB SYSTEM FULLCALENDAR.
-    Produces:
-    - reservations (per day)
-    - reservations_by_date {date: [...]}
-    - admin_borrow (per day)
-    - admin_borrow_full {date: [...]}
-    - blocked
-    """
-
     from datetime import timedelta, date
 
-    # Item
     try:
         item = Item.objects.get(item_id=item_id)
     except Item.DoesNotExist:
@@ -2704,15 +3085,11 @@ def get_item_calendar(request, item_id):
 
     total_capacity = item.qty
 
-    # ============================
-    # 1. MULTI-ITEM RESERVATIONS
-    # ============================
     res_items = ReservationItem.objects.filter(
         item=item,
         reservation__status__in=["pending", "approved", "in use"]
     ).select_related("reservation", "reservation__userborrower")
 
-    # Flatten
     flat_reservations = []
     for ri in res_items:
         r = ri.reservation
@@ -2724,14 +3101,7 @@ def get_item_calendar(request, item_id):
             "status": r.status,
         })
 
-    # ============================
-    # 2. ADMIN BORROW
-    # ============================
-    admin_borrow_qs = AdminBorrow.objects.filter(
-        item=item,
-        status="In Use"
-    )
-
+    admin_borrow_qs = AdminBorrow.objects.filter(item=item, status="In Use")
     flat_admin = []
     for ab in admin_borrow_qs:
         flat_admin.append({
@@ -2747,15 +3117,9 @@ def get_item_calendar(request, item_id):
             "id": ab.id,
         })
 
-    # ============================
-    # 3. BLOCKED DATES
-    # ============================
     blocked = list(BlockedDate.objects.filter(item=item).values_list("date", flat=True))
     blocked_set = set(blocked)
 
-    # ============================
-    # 4. PER-DAY MAPPING (60 days)
-    # ============================
     today = date.today()
     end = today + timedelta(days=60)
 
@@ -2766,41 +3130,23 @@ def get_item_calendar(request, item_id):
     while current <= end:
         key = current.isoformat()
 
-        # RESERVATIONS
-        res_for_day = []
-        for r in flat_reservations:
-            if r["date_borrowed"] <= key <= r["date_return"]:
-                res_for_day.append(r)
-
+        res_for_day = [r for r in flat_reservations if r["date_borrowed"] <= key <= r["date_return"]]
         reservations_by_date[key] = res_for_day
 
-        # ADMIN BORROW
-        admin_for_day = []
-        for ab in flat_admin:
-            if ab["start"] <= key <= ab["end"]:
-                admin_for_day.append(ab)
-
+        admin_for_day = [ab for ab in flat_admin if ab["start"] <= key <= ab["end"]]
         admin_borrow_full[key] = admin_for_day
 
         current += timedelta(days=1)
 
-    # ============================
-    # 5. FINAL RESPONSE (WEB FORMAT)
-    # ============================
     return Response({
         "item_id": item.item_id,
         "item_name": item.name,
-
-        # FullCalendar events use these:
         "reservations": [
             {"date": r["date_borrowed"], "name": r["name"], "status": r["status"]}
             for r in flat_reservations
         ],
-
         "admin_borrow": admin_borrow_full,
         "blocked": [d.isoformat() for d in blocked],
-
-        # Lower table uses these:
         "reservations_by_date": reservations_by_date,
         "admin_borrow_full": admin_borrow_full,
     })
@@ -2810,14 +3156,13 @@ def get_item_calendar(request, item_id):
 
 
 # Unified block/unblock (for admin dashboard)
+# ----------------------------------------------------------
+# BLOCK / UNBLOCK a date (admin use)
+# ----------------------------------------------------------
 @csrf_exempt
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def toggle_block_date(request, item_id):
-    """
-    Toggle a block date for a specific item.
-    When blocked, users on the mobile app CANNOT reserve that date.
-    """
     try:
         body = json.loads(request.body or "{}")
         date_str = body.get("date")
@@ -2843,21 +3188,18 @@ def toggle_block_date(request, item_id):
     except Item.DoesNotExist:
         return Response({"error": "Item not found"}, status=404)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return Response({"error": str(e)}, status=500)
+
     
     
 
 
 #  Cancel Reservation, qty increase and Notification
+# ----------------------------------------------------------
+# CANCEL ALL RESERVATIONS FOR A GIVEN DATE (ADMIN)
+# ----------------------------------------------------------
 @api_view(["POST"])
 def cancel_reservations_for_date(request, item_id):
-    """
-    Cancels all active reservations for a given date and item.
-    Restores reserved quantities to the item stock.
-    Sends notifications to affected borrowers.
-    """
     try:
         date_str = request.data.get("date")
         if not date_str:
@@ -2867,10 +3209,8 @@ def cancel_reservations_for_date(request, item_id):
         if not date:
             return Response({"error": "Invalid date format"}, status=400)
 
-        # Get the item
         item = Item.objects.get(item_id=item_id)
 
-        # Find reservations overlapping the selected date
         reservations = Reservation.objects.filter(
             item=item,
             date_borrowed__lte=date,
@@ -2890,23 +3230,20 @@ def cancel_reservations_for_date(request, item_id):
             r.save(update_fields=["status"])
             cancelled_count += 1
 
-            #  Send a notification to each affected borrower
             if borrower:
                 create_notification(
                     borrower,
-                    title="Reservation Cancelled by Admin ",
-                    message=f"Your reservation for {r.item.name} on {r.date_borrowed.strftime('%Y-%m-%d')} has been cancelled by the admin.",
+                    title="Reservation Cancelled by Admin",
+                    message=f"Your reservation for {r.item.name} has been cancelled.",
                     notif_type="cancelled",
                     reservation=r
                 )
 
-        # ✅ Update item qty
-        if total_restored > 0:
-            item.qty = item.qty + total_restored
-            item.save(update_fields=["qty"])
+        item.qty += total_restored
+        item.save(update_fields=["qty"])
 
         return Response({
-            "message": f"{cancelled_count} reservation(s) cancelled for {date_str}.",
+            "message": f"{cancelled_count} reservation(s) cancelled.",
             "restored_qty": total_restored,
             "new_item_qty": item.qty
         }, status=200)
@@ -2914,9 +3251,8 @@ def cancel_reservations_for_date(request, item_id):
     except Item.DoesNotExist:
         return Response({"error": "Item not found"}, status=404)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return Response({"error": str(e)}, status=500)
+
 
     
     
@@ -3671,13 +4007,12 @@ def update_report_status(request, report_id):
     return JsonResponse({"success": True, "new_status": report.status})
 
 
+# ----------------------------------------------------------
+# SUGGEST ALTERNATIVE ITEMS (DATE RANGE)
+# ----------------------------------------------------------
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def suggest_items(request):
-    """
-    Suggest available items for a given date range.
-    Fully compatible with multi-item reservation system.
-    """
     try:
         start_date = parse_date(request.data.get("start_date"))
         end_date = parse_date(request.data.get("end_date"))
@@ -3691,14 +4026,11 @@ def suggest_items(request):
 
         suggestions = []
 
-        # Loop through ALL items
         for item in Item.objects.all():
 
-            # Skip the main item
             if str(item.item_id) == str(exclude_item):
                 continue
 
-            # FIXED HERE — correct Django ORM lookup
             overlap = ReservationItem.objects.filter(
                 item=item,
                 reservation__status__in=["pending", "approved", "in use"],
@@ -3719,13 +4051,11 @@ def suggest_items(request):
                     "image": request.build_absolute_uri(item.image.url) if item.image else None
                 })
 
-        return Response({
-            "success": True,
-            "suggestions": suggestions
-        }, status=200)
+        return Response({"success": True, "suggestions": suggestions})
 
     except Exception as e:
         return Response({"success": False, "message": str(e)}, status=500)
+
 
 
 def schedule_smart_alerts(reservation):
@@ -3768,3 +4098,88 @@ def schedule_smart_alerts(reservation):
         scheduled_at=one_hour_later,
     )
 
+@api_view(["POST"])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAuthenticated])
+def submit_letter(request):
+    try:
+        borrower = UserBorrower.objects.get(user=request.user)
+
+        # Extract normal fields
+        letter_text = request.data.get("letter_text", "")
+        date_borrowed = request.data.get("date_borrowed")
+        date_return = request.data.get("date_return")
+        priority = request.data.get("priority", "Low")
+        priority_detail = request.data.get("priority_detail", "")
+        contact = borrower.contact_number
+
+        # Required
+        if not date_borrowed or not date_return:
+            return Response({"status": "error", "message": "Date range required"}, status=400)
+
+        # Extract file uploads
+        id_image = request.FILES.get("id_card_image")
+        signature_img = request.FILES.get("signature_image")
+
+        # Create reservation
+        reservation = Reservation.objects.create(
+            userborrower=borrower,
+            letter_text=letter_text,
+            date_borrowed=date_borrowed,
+            date_return=date_return,
+            priority=priority,
+            priority_detail=priority_detail,
+            contact=contact,
+            valid_id_image=id_image,
+            signature_image=signature_img,
+            status="pending",
+
+            # NEW SYSTEM FIELDS
+            borrow_date=date_borrowed,               # System tracks start
+            expected_return_date=date_return         # System tracks expected return
+        )
+
+        # Parse JSON items
+        items_json = request.data.get("items")
+        if not items_json:
+            reservation.delete()
+            return Response({"status": "error", "message": "Items list is required"}, status=400)
+
+        try:
+            items = json.loads(items_json)
+        except:
+            reservation.delete()
+            return Response({"status": "error", "message": "Invalid items JSON"}, status=400)
+
+        for it in items:
+            item_obj = Item.objects.get(item_id=it["id"])
+            qty = int(it["quantity"])
+
+            ReservationItem.objects.create(
+                reservation=reservation,
+                item=item_obj,
+                item_name=item_obj.name,
+                quantity=qty
+            )
+
+# ⭐ Compute and store PRIORITY SCORE (AFTER items + created_at exist)
+            reservation.refresh_from_db()  
+            items = reservation.items.all()
+
+            if items.exists():
+                reservation.priority_score = compute_priority(reservation)
+            else:
+                reservation.priority_score = 0
+
+            reservation.save()
+
+
+
+        return Response({
+            "status": "success",
+            "transaction_id": reservation.transaction_id,
+            "priority_score": reservation.priority_score
+        }, status=201)
+
+    except Exception as e:
+        return Response({"status": "error", "message": str(e)}, status=500)

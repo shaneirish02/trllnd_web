@@ -2,653 +2,626 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>TrailLend Dashboard</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TrailLend Dashboard</title>
 
-  <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
-  <link rel="icon" type="image/svg" href="{% static 'favicon.svg' %}">
-
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
+<link rel="icon" type="image/svg" href="{% static 'favicon.svg' %}">
 
 
-  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+<style> 
 
- <style>
-    .modal-card {
-      width: 520px;
-      max-height: 90vh;
-      background: #fff;
-      border-radius: 14px;
-      overflow-y: auto;
-      padding: 0;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.20);
-      animation: fadeIn 0.25s ease;
-    }
+  /* ================================
+   GLOBAL RESET / BASE
+================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      padding: 16px 20px;
-      background: #5d82d2;
-      color: #fff;
-      align-items: center;
-    }
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: "Poppins", Arial, sans-serif;
+  background: #f4f6f9;
+}
 
-    .modal-header h2 {
-      font-size: 1.5 rem;
-      font-weight: 600;
-    }
+/* ================================
+   HEADER
+================================ */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  padding: 12px 20px;
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 1000;
+}
 
-    .modal-close {
-      background: transparent;
-      border: none;
-      font-size: 24px;
-      color: #fff;
-      cursor: pointer;
-    }
+.logo {
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+  font-weight: 600;
+}
 
-    .modal-body {
-      padding: 18px 22px;
-    }
+.logo img.avatar {
+  width: 45px;
+  height: 35px;
+  margin-right: 10px;
+}
 
-    .section {
-      margin-bottom: 18px;
-    }
+.header-title {
+  flex: 1;
+  text-align: center;
+  color: #444;
+  font-weight: 600;
+}
 
-    .section h3 {
-      font-size: 1rem;
-      color: #1e3a8a;
-      font-weight: 600;
-      margin-bottom: 6px;
-    }
+.notif-bell {
+  font-size: 1.4rem;
+  cursor: pointer;
+}
 
-    .item-list {
-      list-style: none;
-      padding-left: 0;
-    }
+.notif-badge {
+  position: absolute !important;
+  top: -8px;
+  right: -8px;
+  background: #e11d48 !important;
+  color: #fff !important;
+  padding: 3px 7px !important;
+  border-radius: 999px !important;
+  min-width: 18px;
+  height: 18px;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-align: center;
+  display: none;
+  pointer-events: none;
+}
 
-    .item-list li {
-      background: #eef6ff;
-      padding: 8px 10px;
-      border-radius: 8px;
-      margin-bottom: 6px;
-      border-left: 4px solid #2563eb;
-    }
+/* ================================
+   SIDEBAR
+================================ */
+.sidebar {
+  position: fixed;
+  top: 60px;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  background: #fff;
+  border-right: 1px solid #ddd;
+  padding: 20px 12px;
+  overflow-y: auto;
+  z-index: 999;
+}
 
-    .image-row {
-      display: flex;
-      gap: 12px;
-    }
+.sidebar a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  text-decoration: none;
+  color: #444;
+  transition: 0.2s;
+}
 
-    .doc-img {
-      width: 120px;
-      height: 120px;
-      border-radius: 8px;
-      object-fit: cover;
-      border: 1px solid #ddd;
-      cursor: pointer;
-      transition: transform 0.2s ease;
-    }
+.sidebar a:hover {
+  background: #e9f3ff;
+}
 
-    .doc-img:hover {
-      transform: scale(1.04);
-    }
+.sidebar a.active {
+  background: #90c8d8;
+  color: white;
+}
 
-    .modal-footer {
-      display: flex;
-      justify-content: space-between;
-      padding: 14px 20px;
-      border-top: 1px solid #e2e8f0;
-    }
+.sidebar a i {
+  font-size: 1.1rem;
+}
 
-    .btn {
-      padding: 10px 16px;
-      border-radius: 8px;
-      border: none;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: 0.2s ease;
-    }
+/* ================================
+   RIGHT PENDING PANEL
+================================ */
+.pending-panel {
+  position: fixed;
+  top: 60px;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  background: #ffffff;
+  border-left: 1px solid #d9dfe7;
+  padding: 18px;
+  overflow-y: auto;
+  z-index: 900;
+}
 
-    .btn-approve {
-      background: #22c55e;
-      color: #fff;
-    }
-    .btn-approve:hover { background: #16a34a; }
+.pending-panel h3 {
+  margin-bottom: 14px;
+  font-weight: 700;
+  font-size: 16px;
+  color: #1e293b;
+}
 
-    .btn-declined {
-      background: #ef4444;
-      color: #fff;
-    }
-    .btn-declined:hover { background: #dc2626; }
+/* Pending List */
+#pendingList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
 
-    .badge {
-      width: fit-content;
-      margin-bottom: 10px;
-      padding: 5px 12px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-    }
+.pending-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffffffaa;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  border-left: 5px solid #4FC3F7;
+  cursor: pointer;
+  transition: 0.15s ease-in-out;
+}
 
-    .badge.high {
-      background: #fde2e2;
-      color: #b91c1c;
-    }
+.pending-item:hover {
+  background: #eef7ff;
+  transform: translateY(-2px);
+}
 
-    .badge.low {
-      background: #e8f9ee;
-      color: #15803d;
-    }
-  </style>
+.meta-user {
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+
+.user-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0D47A1;
+}
+
+.dot {
+  margin: 0 3px;
+}
+
+.status {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status.pending {
+  color: #FFA500 !important;
+}
+
+.item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+}
+
+.more-items {
+  color: #555;
+  font-size: 12px;
+}
+
+/* Priority Badges */
+.priority-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: white;
+}
+
+.priority-badge.high {
+  background: #FFA500;
+}
+
+.priority-badge.low {
+  background: #4FC3F7;
+}
+
+/* Empty state */
+.pending-empty {
+  text-align: center;
+  font-size: 13px;
+  color: #777;
+  font-style: italic;
+}
+
+/* ================================
+   MAIN CONTENT
+================================ */
+.content {
+  position: fixed;
+  top: 60px;
+  left: 240px;
+  right: 300px;
+  bottom: 0;
+  padding: 20px;
+  overflow-y: auto;
+  background: #f9fafc;
+}
+
+body:not(.dashboard) .content {
+  right: 0 !important;
+}
+
+/* ================================
+   RESERVATION MODAL
+================================ */
+.modal-card {
+  background: #fff;
+  border-radius: 16px;
+  width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  animation: popIn 0.25s ease-out;
+}
+
+@keyframes popIn {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.modal-header {
+  background: #4FC3F7;
+  padding: 18px 22px;
+  color: white;
+  font-weight: 700;
+  font-size: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 26px;
+  color: white;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 26px;
+  overflow-y: auto;
+}
+
+/* Section Titles */
+.section h3 {
+  font-weight: 700;
+  font-size: 16px;
+  color: #0D47A1;
+  margin-bottom: 8px;
+}
+
+/* Info Boxes */
+.info-box {
+  background: #f0f4f8;
+  border-radius: 10px;
+  padding: 14px;
+  min-height: 80px;
+  border: 1px solid #d8e1eb;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.5;
+}
+
+/* Priority Badge */
+.badge {
+  padding: 8px 16px;
+  font-size: 15px;
+  border-radius: 30px;
+  font-weight: 700;
+  width: fit-content;
+  margin-bottom: 10px;
+}
+
+.badge.high {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+.badge.low {
+  background: #e3f9ee;
+  color: #2e7d32;
+  border: 1px solid #b2dfdb;
+}
+
+/* Borrower Info */
+.section p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.section p strong {
+  color: #111;
+  font-weight: 700;
+}
+
+/* Requested Items */
+.item-list {
+  list-style: none;
+  padding: 0;
+}
+
+.item-list li {
+  background: #f8fafc;
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  border: 1px solid #e2e8f0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Image */
+.doc-img {
+  width: 100%;
+  max-height: 250px;
+  object-fit: contain;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: white;
+}
+
+/* Footer Buttons */
+.modal-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.btn {
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-approve {
+  background: #4CAF50;
+  color: white;
+}
+
+.btn-approve:hover {
+  background: #449d48;
+}
+
+.btn-declined {
+  background: #E53935;
+  color: white;
+}
+
+.btn-declined:hover {
+  background: #c62828;
+}
+
+/* ================================
+   DECLINE MODAL
+================================ */
+.decline-box {
+  width: 400px;
+  background: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+
+.decline-box h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0D47A1;
+  margin-bottom: 12px;
+}
+
+.decline-textarea {
+  width: 100%;
+  height: 120px;
+  border-radius: 6px;
+  padding: 10px;
+  border: 1px solid #ccc;
+}
+
+.decline-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.decline-cancel,
+.decline-submit {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+.decline-cancel {
+  background: #e0e0e0;
+}
+
+.decline-submit {
+  background: #E53935;
+  color: white;
+}
+
+
+</style>
 </head>
-<body>
-  <!-- Header -->
-  <header class="header">
+
+
+<body class="{% if request.resolver_match.url_name == 'dashboard' %}dashboard{% endif %}">
+
+
+
+<!-- HEADER -->
+<header class="header">
     <div class="logo">
-      <img src="{% static 'TRAILLEND-ICON.png' %}" alt="TRAILLEND-ICON" class="avatar"/>
-      <span>TrailLend</span>
+        <img src="{% static 'TRAILLEND-ICON.png' %}" class="avatar"/>
+        <span>TrailLend</span>
     </div>
+
     <div class="header-title">Barangay Kauswagan - General Service Office</div>
 
-    
-    <div class="notif-bell" onclick="togglePendingPanel()">
+    <div class="notif-bell" style="position:relative;">
       <i class="fa-solid fa-bell"></i>
-      <span id="notifCount" class="notif-badge" style="display:none;">0</span>
+      <span id="notifCount" class="notif-badge">0</span>
     </div>
 
-  </header>
+</header>
 
-  <div class="container">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <p class="menu-label">MENU</p>
+<!-- SIDEBAR -->
+<aside class="sidebar">
+    <p class="menu-label">MENU</p>
 
-      <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+    <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
         <i class="fa-solid fa-gauge"></i> Dashboard
-      </a>
+    </a>
 
-      <a href="{% url 'inventory' %}" class="{% if request.resolver_match.url_name == 'inventory' %}active{% endif %}">
+    <a href="{% url 'inventory' %}" class="{% if request.resolver_match.url_name == 'inventory' %}active{% endif %}">
         <i class="fas fa-box"></i> Inventory
-      </a>
+    </a>
 
-      <a href="{% url 'verification' %}" class="{% if request.resolver_match.url_name == 'verification' %}active{% endif %}">
+    <a href="{% url 'verification' %}" class="{% if request.resolver_match.url_name == 'verification' %}active{% endif %}">
         <i class="fa-solid fa-check-circle"></i> Verification
-      </a>
+    </a>
 
-      <a href="{% url 'transaction_log' %}" class="{% if request.resolver_match.url_name == 'transaction_log' %}active{% endif %}">
+    <a href="{% url 'transaction_log' %}" class="{% if request.resolver_match.url_name == 'transaction_log' %}active{% endif %}">
         <i class="fa-solid fa-clock-rotate-left"></i> Transaction Log
-      </a>
+    </a>
 
-      <a href="{% url 'damage_loss_report_list' %}" class="{% if request.resolver_match.url_name == 'damage_loss_report_list' %}active{% endif %}">
+    <a href="{% url 'damage_loss_report_list' %}" class="{% if request.resolver_match.url_name == 'damage_loss_report_list' %}active{% endif %}">
         <i class="fa-solid fa-file-lines"></i> Damage Report
-      </a>
+    </a>
 
-      <a href="{% url 'statistics' %}" class="{% if request.resolver_match.url_name == 'statistics' %}active{% endif %}">
+    <a href="{% url 'statistics' %}" class="{% if request.resolver_match.url_name == 'statistics' %}active{% endif %}">
         <i class="fa-solid fa-chart-bar"></i> Statistics
-      </a>
+    </a>
 
-      <a href="{% url 'list_of_users' %}" class="{% if request.resolver_match.url_name == 'list_of_users' %}active{% endif %}">
+    <a href="{% url 'list_of_users' %}" class="{% if request.resolver_match.url_name == 'list_of_users' %}active{% endif %}">
         <i class="fa-solid fa-users"></i> List of Users
-      </a>
+    </a>
 
-      <a href="{% url 'change_password' %}" class="{% if request.resolver_match.url_name == 'change_password' %}active{% endif %}">
+    <a href="{% url 'change_password' %}" class="{% if request.resolver_match.url_name == 'change_password' %}active{% endif %}">
         <i class="fa-solid fa-key"></i> Change Pass
-      </a>
+    </a>
 
-      <a href="{% url 'logout' %}">
+    <a href="{% url 'logout' %}">
         <i class="fa-solid fa-right-from-bracket"></i> Log out
-      </a>
-    </aside>
+    </a>
+</aside>
 
-    <!-- Main content -->
-    <main class="content {% if request.resolver_match.url_name != 'dashboard' %}fullwidth{% endif %}">
-      {% block content %}{% endblock %}
-    </main>
+<!-- RIGHT PANEL -->
+{% if request.resolver_match.url_name == 'dashboard' %}
+<aside class="pending-panel">
+    <h3>Pending Requests</h3>
+    <ul id="pendingList"><li>Loading...</li></ul>
+</aside>
+{% endif %}
 
-    <!-- Right Pending Panel -->
-    {% if request.resolver_match.url_name == 'dashboard' %}
-      <!-- Right Pending Panel (Dashboard only) -->
-      <div class="pending-container">
-        <aside id="pendingPanel" class="side-panel">
-          <h3 style="display:flex; justify-content:space-between; align-items:center; position:relative;">
-            <span>Pending Requests</span>
-            <i class="fa-solid fa-filter" id="filterIcon" style="cursor:pointer; font-size:15px;"></i>
+<!-- MAIN CONTENT -->
+<main class="content">
+    {% block content %}{% endblock %}
+</main>
 
-            <!-- Filter Dropdown -->
-            <div id="filterMenu" 
-                style="display:none; position:absolute; top:25px; right:0; background:white; border:1px solid #ddd;
-                  border-radius:6px; box-shadow:0 3px 6px rgba(0,0,0,0.15); width:130px; z-index:999; 
-                  font-weight:normal; font-size:14px;">
-              <div onclick="setFilter('all')" style="padding:8px 10px; cursor:pointer; font-weight:normal;">Show All</div>
-              <div onclick="setFilter('High')" style="padding:8px 10px; cursor:pointer; font-weight:normal;">High Priority</div>
-              <div onclick="setFilter('Low')" style="padding:8px 10px; cursor:pointer; font-weight:normal;">Low Priority</div>
-            </div>
-          </h3>
-
-          <ul id="pendingList">
-            <li class="pending-item">Loading…</li>
-          </ul>
-        </aside>
-      </div>
-    {% endif %}
-
-  <!-- Reservation Modal -->
-  <div id="reservationModal" 
-      style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
-              justify-content:center; align-items:center; z-index:2000;">
+<!-- RESERVATION MODAL -->
+<div id="reservationModal"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+            justify-content:center; align-items:center; z-index:5000;">
 
     <div class="modal-card">
-      
-      <!-- HEADER -->
-      <div class="modal-header">
-        <h2>Reservation Details</h2>
-        <button id="closeModal" class="modal-close">&times;</button>
-      </div>
-
-      <!-- BODY -->
-      <div class="modal-body">
-
-        <!-- PRIORITY BADGE -->
-        <div id="modalPriorityBadge" class="badge"></div>
-
-        <!-- Borrower Info -->
-        <div class="section">
-          <h3>Borrower Information</h3>
-          <p><strong>Name:</strong> <span id="modalBorrower"></span></p>
-          <p><strong>Contact:</strong> <span id="modalContact"></span></p>
+        <div class="modal-header">
+            <h2>Reservation Details</h2>
+            <button id="closeModal" class="modal-close">&times;</button>
         </div>
 
-        <!-- MULTIPLE ITEMS -->
-        <div class="section">
-          <h3>Requested Items</h3>
-          <ul id="modalItemList" class="item-list"></ul>
+        <div class="modal-body">
+
+            <div>
+                <div class="section">
+                    <h3>Reason for Borrowing</h3>
+                    <div class="info-box">
+                        <p id="modalReasonLeft"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div style="margin-bottom: 10px;">
+                    <span id="modalPriorityBadge" class="badge"></span>
+                </div>
+
+                <div class="section">
+                    <h3>Borrower Information</h3>
+                    <p><strong>Name:</strong> <span id="modalBorrower"></span></p>
+                    <p><strong>Contact:</strong> <span id="modalContact"></span></p>
+                </div>
+
+                <div class="section">
+                    <h3>Requested Items</h3>
+                    <ul id="modalItemList" class="item-list"></ul>
+                </div>
+
+                <div class="section">
+                    <h3>Schedule</h3>
+                    <p><strong>Borrow Date:</strong> <span id="modalBorrowDate"></span></p>
+                    <p><strong>Return Date:</strong> <span id="modalReturnDate"></span></p>
+                </div>
+
+                <div class="section">
+                    <h3>Valid ID</h3>
+                    <img id="modalID" class="doc-img" alt="ID">
+                </div>
+
+                <div class="modal-footer">
+                    <button id="approveBtn" class="btn btn-approve">Approve</button>
+                    <button id="declinedBtn" class="btn btn-declined">Decline</button>
+                </div>
+            </div>
+
         </div>
-
-        <!-- DATE RANGE -->
-        <div class="section">
-          <h3>Schedule</h3>
-          <p><strong>Borrow Date:</strong> <span id="modalBorrowDate"></span></p>
-          <p><strong>Return Date:</strong> <span id="modalReturnDate"></span></p>
-        </div>
-
-        <!-- MESSAGE -->
-        <div class="section">
-          <h3>Message</h3>
-          <p id="modalMessage"></p>
-        </div>
-
-        <!-- IMAGES -->
-        <div class="section">
-          <h3>Attached Documents</h3>
-          <div class="image-row">
-            <img id="modalLetter" class="doc-img" alt="Letter">
-            <img id="modalID" class="doc-img" alt="ID">
-          </div>
-        </div>
-
-      </div>
-
-      <!-- FOOTER BUTTONS -->
-      <div class="modal-footer">
-        <button id="approveBtn" class="btn btn-approve">Approve</button>
-        <button id="declinedBtn" class="btn btn-declined">declined</button>
-      </div>
-
     </div>
-  </div>
-
-  <!-- declined Reason Modal -->
-  <div id="declinedModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
-        justify-content:center; align-items:center; z-index:3000;">
-    <div style="background:#fff; padding:20px; border-radius:10px; width:400px;">
-      <h3>Reason for declined</h3>
-      <textarea id="declinedReason" style="width:100%;height:100px;padding:10px;border-radius:6px;border:1px solid #ccc;resize:none;"></textarea>
-      <div style="margin-top:15px;display:flex;justify-content:flex-end;gap:10px;">
-        <button id="canceldeclined" style="background:#ccc;padding:8px 12px;border:none;border-radius:6px;">Cancel</button>
-        <button id="submitdeclined" style="background:#e74c3c;color:#fff;padding:8px 12px;border:none;border-radius:6px;">Submit</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Image Viewer -->
-  <div id="imageViewer" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9);
-        justify-content:center; align-items:center; z-index:4000;">
-    <img id="viewerImg" src="" alt="Preview" style="max-width:90%;max-height:90%;border-radius:10px;">
-    <button id="closeViewer" style="position:absolute;top:20px;right:30px;background:none;border:none;color:#fff;font-size:2rem;cursor:pointer;">&times;</button>
-  </div>
-
-  <!-- ======= JS SECTION ======= -->
-  <script>
-
-    document.addEventListener("DOMContentLoaded", () => {
-
-    // ✅ FIXED: Add missing getCookie()
-    function getCookie(name) {
-      let cookieValue = null;
-      if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let cookie of cookies) {
-          cookie = cookie.trim();
-          if (cookie.startsWith(name + '=')) {
-            cookieValue = decodeURIComponent(cookie.slice(name.length + 1));
-            break;
-          }
-        }
-      }
-      return cookieValue;
-    }
-
-    const csrftoken = getCookie('csrftoken');
-
-    let currentFilter = "all";
-
-    async function fetchPendingRequests() {
-      try {
-        const response = await fetch("{% url 'pending_requests_api' %}");
-        const data = await response.json();
-        let html = data.html || "";
-
-        // 🔍 Apply Filter (High / Low / All)
-        if (currentFilter !== "all") {
-          const temp = document.createElement("div");
-          temp.innerHTML = html;
-
-          temp.querySelectorAll("li.pending-item").forEach(item => {
-              const badgeEl = item.querySelector(".priority-badge");
-
-              if (!badgeEl) return;
-
-              const badgeText = badgeEl.innerText.trim().toLowerCase();   // "high" or "low"
-              const filter = currentFilter.toLowerCase();                  // "high" or "low"
-
-              if (filter !== "all" && badgeText !== filter) {
-                  item.remove();
-              }
-          });
-
-          html = temp.innerHTML;
-        }
-
-        const list = document.getElementById('pendingList');
-        list.innerHTML = html || '<li class="pending-item">No pending requests</li>';
-        attachClickEvents();
-
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    document.getElementById("filterIcon").onclick = () => {
-      const menu = document.getElementById("filterMenu");
-      menu.style.display = menu.style.display === "block" ? "none" : "block";
-    };
-
-    function setFilter(type) {
-      currentFilter = type;
-      document.getElementById("filterMenu").style.display = "none";
-      fetchPendingRequests();
-    }
-
-    // Close dropdown when clicking outside
-    document.addEventListener("click", function(e) {
-      if (!e.target.closest("#filterMenu") && e.target.id !== "filterIcon") {
-        document.getElementById("filterMenu").style.display = "none";
-      }
-    });
-    function attachClickEvents() {
-      document.querySelectorAll('#pendingList .pending-item').forEach(item => {
-        const id = item.dataset.id;
-
-        item.onclick = async () => {
-
-          const res = await fetch(`/api/reservation_detail/${id}/`);
-          const data = await res.json();
-
-          /* -------- PRIORITY -------- */
-          const badge = document.getElementById("modalPriorityBadge");
-          badge.innerText = data.priority_display ?? "No Priority";
-          badge.className = "badge " + (data.priority_display === "High" ? "high" : "low");
-
-          /* -------- BORROWER -------- */
-          document.getElementById("modalBorrower").innerText =
-            data.userborrower?.full_name || "No name provided";
-
-          document.getElementById("modalContact").innerText =
-            data.contact_number || "No contact number";
-
-          /* -------- ITEMS -------- */
-          const list = document.getElementById("modalItemList");
-          list.innerHTML = "";
-
-          if (data.items?.length > 0) {
-            data.items.forEach(it => {
-              list.innerHTML += `<li><strong>${it.item_name}</strong> — x${it.quantity}</li>`;
-            });
-          } else {
-            list.innerHTML = "<li>No items found</li>";
-          }
-
-          /* -------- DATES -------- */
-          document.getElementById("modalBorrowDate").innerText = data.date_borrowed || "—";
-          document.getElementById("modalReturnDate").innerText = data.date_return || "—";
-
-          /* -------- MESSAGE -------- */
-          document.getElementById("modalMessage").innerText = 
-            data.message || "No message provided";
-
-          /* -------- DOCUMENTS -------- */
-          document.getElementById("modalLetter").src = data.letter_image || "";
-          document.getElementById("modalID").src = data.valid_id_image || "";
-
-          /* -------- SHOW MODAL -------- */
-          document.querySelector('.pending-container').style.display = 'none';
-          document.getElementById('reservationModal').style.display = 'flex';
-
-          /* -------- APPROVAL -------- */
-          document.getElementById('approveBtn').onclick = () => updateReservation(id, "approved");
-
-          /* -------- declined -------- */
-          document.getElementById('declinedBtn').onclick = () => {
-            document.getElementById('declinedModal').style.display = "flex";
-            document.getElementById('submitdeclined').onclick = () => {
-              const reason = document.getElementById("declinedReason").value.trim();
-              if (!reason) return alert("Please enter a reason.");
-              updateReservation(id, "declined", reason);
-            };
-          };
-
-        }; // END ONCLICK
-      });
-    }
-
-    /* -------------------------------
-      CLOSE MAIN MODAL
-    --------------------------------*/
-    document.getElementById('closeModal').onclick = () => {
-      document.getElementById('reservationModal').style.display = 'none';
-      document.querySelector('.pending-container').style.display = 'block';
-    };
-
-    /* -------------------------------
-      CLOSE declined MODAL
-    --------------------------------*/
-    document.getElementById('canceldeclined').onclick = () => {
-      document.getElementById('declinedModal').style.display = 'none';
-    };
-
-    /* -------------------------------
-      IMAGE VIEWER
-    --------------------------------*/
-    document.getElementById('closeViewer').onclick = () => {
-      document.getElementById('imageViewer').style.display = 'none';
-    };
-
-    document.getElementById('modalLetter').onclick = (e) => {
-      document.getElementById('viewerImg').src = e.target.src;
-      document.getElementById('imageViewer').style.display = 'flex';
-    };
-
-    document.getElementById('modalID').onclick = (e) => {
-      document.getElementById('viewerImg').src = e.target.src;
-      document.getElementById('imageViewer').style.display = 'flex';
-    };
-
-
-    async function updateReservation(id, status, reason = null) {
-      const payload = { status };
-      if (reason) payload.reason = reason;
-      const res = await fetch(`/api/reservation_update/${id}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrftoken
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.status === 'success') {
-        showToast(`Reservation ${status} successfully `, "success");
-        document.getElementById('reservationModal').style.display = 'none';
-        fetchPendingRequests();
-        
-      } else {
-        showToast(data.message || 'Failed to update reservation', "error");
-        
-      }
-    }
-
-    fetchPendingRequests();
-    setInterval(fetchPendingRequests, 10000);
-    });
-  </script>
-
-  <script>
-  window.addEventListener("load", function() {
-  const content = document.querySelector(".content");
-  const pendingPanel = document.querySelector(".pending-container");
-
-  if (!content) return;
-
-  // Determine if we're on Dashboard page
-  const isDashboard = window.location.pathname.includes("dashboard");
-
-  // Hide or show panel based on page
-  if (!isDashboard) {
-    if (pendingPanel) pendingPanel.style.display = "none";
-    content.classList.add("fullwidth");
-  } else {
-    content.classList.remove("fullwidth");
-  }
-
-  document.body.classList.add("ready");
-});
-</script>
-
-<!-- Toast Notification Container -->
-<div id="toast-container"
-     style="position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px;">
 </div>
 
+<!-- DECLINE MODAL -->
+<div id="declinedModal"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+            justify-content:center; align-items:center; z-index:6000;">
 
-<script>
-function showToast(message, type = "success") {
-  const container = document.getElementById("toast-container");
- 
+    <div class="decline-box">
+        <h3>Reason for Decline</h3>
+        <textarea id="declinedReason" class="decline-textarea"></textarea>
 
-  // Create toast element
-  const toast = document.createElement("div");
-  toast.textContent = message;
-  toast.style.padding = "15px 20px";
-  toast.style.borderRadius = "8px";
-  toast.style.color = "#fff";
-  toast.style.fontSize = "0.9rem";
-  toast.style.fontWeight = "500";
-  toast.style.boxShadow = "0 3px 8px rgba(0,0,0,0.25)";
-  toast.style.opacity = "0";
-  toast.style.transform = "translateX(100%)";
-  toast.style.transition = "opacity 0.4s ease, transform 0.4s ease";
-  toast.style.willChange = "opacity, transform";
-  
-  // Colors
-  if (type === "success") toast.style.background = "#2ecc71";
-  else if (type === "error") toast.style.background = "#e74c3c";
-  else if (type === "info") toast.style.background = "#3498db";
-  else toast.style.background = "#444";
+        <div class="decline-actions">
+            <button id="cancelDecline" class="decline-cancel">Cancel</button>
+            <button id="submitDecline" class="decline-submit">Submit</button>
+        </div>
+    </div>
 
-  container.appendChild(toast);
+</div>
 
-  // Animate in
-  requestAnimationFrame(() => {
-    toast.style.opacity = "1";
-    toast.style.transform = "translateX(0)";
-  });
-
-  // Auto remove after 3.5s
-  setTimeout(() => {
-    toast.style.opacity = "0";
-    toast.style.transform = "translateX(100%)";
-    setTimeout(() => toast.remove(), 400);
-  }, 3700);
-}
-
-async function updatePendingCount() {
-  try {
-    const response = await fetch("{% url 'pending_requests_api' %}");
-    const data = await response.json();
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = data.html || "";
-
-    // Count list items (pending requests)
-    const count = tempDiv.querySelectorAll("li.pending-item").length;
-
-    const badge = document.getElementById("notifCount");
-    if (count > 0) {
-      badge.textContent = count;
-      badge.style.display = "inline";
-    } else {
-      badge.style.display = "none";
-    }
-  } catch (e) {
-    console.error("Error fetching pending count:", e);
-  }
-}
-
-// 🔁 Update every 10 seconds
-updatePendingCount();
-setInterval(updatePendingCount, 10000);
-
-// Toggle panel when clicking the bell
-function togglePendingPanel() {
-  const panel = document.querySelector(".pending-container");
-  if (!panel) return;
-  const isVisible = panel.style.display !== "none";
-  panel.style.display = isVisible ? "none" : "block";
-}
-</script>
-
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  if (window.location.pathname.includes("dashboard")) {
-    document.body.classList.add("dashboard");
-  }
-});
-</script>
-<script>
-window.addEventListener("load", () => {
-  const content = document.querySelector(".content");
-  if (content) {
-    content.style.opacity = "1";
-    content.style.transform = "none";
-  }
-});
-
-
-</script>
-
-
+<script src="{% static 'js/script.js' %}"></script>
 
 </body>
 </html>
