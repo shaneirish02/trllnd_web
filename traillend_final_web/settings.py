@@ -197,3 +197,5 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 # ============================================================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = '/login/'
+
+PORT = int(os.environ.get("PORT", 10000))
