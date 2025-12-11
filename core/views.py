@@ -1016,7 +1016,7 @@ def api_register(request):
 
 
             # 🧩 Local development link — works, but user won't see the IP
-            verify_url = f"http://10.196.129.244:8000/api/verify-email/{uid}/{token}/"
+            verify_url = f"http://traillend-system.site/api/verify-email/{uid}/{token}/"
 
 
             # HTML Email Template
