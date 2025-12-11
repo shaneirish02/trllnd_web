@@ -68,6 +68,8 @@ from docx.shared import Inches
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from .models import AdminBorrow
+from firebase_admin import auth
+
 
 
 #FORGOT PASSWORD
@@ -956,144 +958,106 @@ def logout(request):
     return redirect('login')
 
 
-# -----------------------
-# API views (JSON)
-# -----------------------
 @csrf_exempt
 def api_register(request):
-    """
-    API endpoint for registration with HTML email and local dev IP support.
-    """
     print("📥 API_REGISTER CALLED")
-    if request.method == "POST":
+
+    if request.method != "POST":
+        return JsonResponse({"success": False, "message": "Invalid request method"}, status=405)
+
+    try:
+        data = json.loads(request.body or "{}")
+
+        username = data.get("username")
+        password = data.get("password")
+        confirm_password = data.get("confirmPassword")
+        full_name = data.get("name")
+        contact_number = data.get("contactNumber")
+        address = data.get("address")
+        email = data.get("email")
+
+        print("📦 Received data:", data)
+
+        # -----------------------
+        # VALIDATION
+        # -----------------------
+        if not all([username, password, confirm_password, full_name, email]):
+            return JsonResponse({"success": False, "message": "Missing required fields"}, status=400)
+
+        if User.objects.filter(username=username).exists():
+            return JsonResponse({"success": False, "message": "Username already exists"}, status=400)
+
+        if User.objects.filter(email=email).exists():
+            return JsonResponse({"success": False, "message": "Email already registered"}, status=400)
+
+        if password != confirm_password:
+            return JsonResponse({"success": False, "message": "Passwords do not match"}, status=400)
+
+        # -----------------------
+        # CREATE USER
+        # -----------------------
+        print("🛠 Creating user...")
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            email=email,
+            is_active=False
+        )
+        print("✅ User created:", user.id)
+
+        # Create borrower profile
+        UserBorrower.objects.create(
+            user=user,
+            full_name=full_name,
+            contact_number=contact_number,
+            address=address
+        )
+        print("🟢 Borrower profile created")
+
+        # -----------------------
+        # FIREBASE EMAIL VERIFICATION
+        # -----------------------
+        print("📨 Generating Firebase verification link...")
+
         try:
-            data = json.loads(request.body or "{}")
-            username = data.get("username")
-            password = data.get("password")
-            confirm_password = data.get("confirmPassword")
-            full_name = data.get("name")
-            contact_number = data.get("contactNumber")
-            address = data.get("address")
-            email = data.get("email")
+            firebase_link = auth.generate_email_verification_link(email)
+            print("🔗 Firebase Verification Link:", firebase_link)
+        except Exception as e:
+            print("❌ Firebase Error:", e)
+            return JsonResponse({
+                "success": False,
+                "message": "Could not generate verification link."
+            }, status=500)
 
-
-            # Validation
-            if not all([username, password, confirm_password, full_name, email]):
-                return JsonResponse({"success": False, "message": "Missing required fields"}, status=400)
-
-
-            if User.objects.filter(username=username).exists():
-                return JsonResponse({"success": False, "message": "Username already exists"}, status=400)
-
-
-            if User.objects.filter(email=email).exists():
-                return JsonResponse({"success": False, "message": "Email already registered"}, status=400)
-
-
-            if password != confirm_password:
-                return JsonResponse({"success": False, "message": "Passwords do not match"}, status=400)
-
-
-            # Create inactive user
-            user = User.objects.create_user(
-                username=username,
-                password=password,
-                email=email,
-                is_active=False
-            )
-
-
-            UserBorrower.objects.create(
-                user=user,
-                full_name=full_name,
-                contact_number=contact_number,
-                address=address
-            )
-
-
-            # Generate verification link (use your local IP for now)
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
-
-
-            # 🧩 Local development link — works, but user won't see the IP
-            verify_url = f"https://traillend-system.site/api/verify-email/{uid}/{token}/"
-
-
-            # HTML Email Template
-            html_message = f"""
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="UTF-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-              <title>Verify Your Email - TrailLend</title>
-            </head>
-            <body style="font-family:'Poppins',Arial,sans-serif; background-color:#f4f6f9; padding:30px;">
-              <table align="center" style="max-width:600px; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-                <tr>
-                  <td style="background-color:#1976D2; text-align:center; padding:30px;">
-                    <img src="https://i.postimg.cc/Dw8pYLL5/TRAILLEND-ICON.png" alt="TrailLend Logo" width="80" />
-                    <h1 style="color:#fff; margin:10px 0 0;">TrailLend</h1>
-                    <p style="color:#cce6ff;">Empowering the Community Together 🌿</p>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:30px;">
-                    <h2 style="color:#1976D2;">Email Verification Required</h2>
-                    <p style="color:#333;">Hi {full_name},</p>
-                    <p style="color:#555;">Thank you for registering on <strong>TrailLend</strong>!
-                    To activate your account, please verify your email address by clicking the button below:</p>
-
-
-                    <div style="text-align:center; margin:30px 0;">
-                      <a href="{verify_url}"
-                         style="background-color:#1976D2; color:#fff; text-decoration:none;
-                                padding:14px 28px; border-radius:8px; font-weight:bold; display:inline-block;">
-                        Verify My Email
-                      </a>
-                    </div>
-
-
-                    <p style="color:#777; font-size:14px;">If you didn’t create this account, please ignore this email.</p>
-                    <hr style="border:none; border-top:1px solid #eee; margin:30px 0;">
-                    <p style="color:#999; font-size:12px; text-align:center;">
-                      © 2025 TrailLend • Barangay General Services Office<br>
-                      Please do not reply directly to this message.
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </body>
-            </html>
-            """
-
-
+        # -----------------------
+        # OPTIONAL: SEND BASIC EMAIL (NO HTML)
+        # -----------------------
+        try:
             send_mail(
                 subject="Verify Your TrailLend Account",
-                message="Please verify your TrailLend account.",
+                message=f"Click this link to verify your account:\n{firebase_link}",
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[email],
                 fail_silently=True,
-                html_message=html_message
             )
-
-
-            return JsonResponse({
-                "success": True,
-                "message": "Registration successful! Check your email to verify your account."
-            }, status=201)
-
-
+            print("📨 Email sent (silently)")
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return JsonResponse({"success": False, "message": str(e)}, status=400)
+            print("❌ Email send error:", e)
 
+        # -----------------------
+        # SUCCESS RESPONSE
+        # -----------------------
+        return JsonResponse({
+            "success": True,
+            "message": "Registration successful! Check your email to verify your account.",
+            "verification_link": firebase_link
+        }, status=201)
 
-    return JsonResponse({"success": False, "message": "Invalid request method"}, status=405)
-
-
+    except Exception as e:
+        print("🔥 EXCEPTION:", e)
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({"success": False, "message": str(e)}, status=400)
 
 
 # Verify Email Endpoint
