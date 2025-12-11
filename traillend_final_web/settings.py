@@ -175,9 +175,9 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # ============================================================
 # 📸 MEDIA / CLOUDINARY
 # ============================================================
-MEDIA_URL = '/media/'
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-CLOUDINARY_URL = os.getenv("CLOUDINARY_URL")  # set in Render
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL")
+MEDIA_URL = '/'
 
 # ============================================================
 # 📧 EMAIL SETTINGS
