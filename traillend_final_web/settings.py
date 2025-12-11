@@ -44,6 +44,7 @@ ALLOWED_HOSTS = [
     os.getenv("RENDER_EXTERNAL_HOSTNAME", ""),
     "traillend-system.site",
     "www.traillend-system.site",
+    ".traillend-system.site",   # wildcard for all subdomains
 ]
 
 # ============================================================

@@ -1016,7 +1016,7 @@ def api_register(request):
 
 
             # 🧩 Local development link — works, but user won't see the IP
-            verify_url = f"http://traillend-system.site/api/verify-email/{uid}/{token}/"
+            verify_url = f"https://traillend-system.site/api/verify-email/{uid}/{token}/"
 
 
             # HTML Email Template
@@ -1073,7 +1073,7 @@ def api_register(request):
                 message="Please verify your TrailLend account.",
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[email],
-                fail_silently=False,
+                fail_silently=True,
                 html_message=html_message
             )
 
