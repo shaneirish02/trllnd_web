@@ -964,6 +964,7 @@ def api_register(request):
     """
     API endpoint for registration with HTML email and local dev IP support.
     """
+    print("📥 API_REGISTER CALLED")
     if request.method == "POST":
         try:
             data = json.loads(request.body or "{}")
